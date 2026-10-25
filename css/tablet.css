@@ -1,0 +1,32 @@
+/* Tablet and phone layout: slim header, schematic sheet filling the middle, parts console docked
+   along the bottom. Everything is a size up, for fingers. At phone width the console squeezes to bare icons. */
+@media (max-width:1280px),(pointer:coarse){[data-layout="tablet"] #tip{display:none}}
+@media (max-width:900px){
+  [data-layout="tablet"] .bar{gap:6px}
+  :where([data-layout="tablet"]) button{padding:9px 8px}
+  [data-layout="tablet"] #docname{width:104px}
+  [data-layout="tablet"] #count{display:none}
+}
+
+[data-layout="tablet"] #main{flex-direction:column}
+[data-layout="tablet"] #rail{order:2;border-top:1px solid var(--grid);
+  display:flex;flex-wrap:wrap;align-items:flex-start;column-gap:18px;row-gap:8px;
+  overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:9px;padding-bottom:max(9px,env(safe-area-inset-bottom,0px))}
+[data-layout="tablet"] .grp{margin:0 0 6px 4px}
+[data-layout="tablet"] #rail .gp{flex:none}
+[data-layout="tablet"] #rail .set{flex-direction:row;gap:2px}
+[data-layout="tablet"] .part{flex-direction:column;gap:3px;padding:4px 4px 5px;border-radius:6px}
+[data-layout="tablet"] .part span{font-size:10px}
+/* the console pictures a size up from the desktop rail, for fingers */
+[data-layout="tablet"] .part canvas{width:56px!important;height:38px!important}
+
+@media (max-width:620px){
+  [data-layout="tablet"] #rail{column-gap:14px}
+  [data-layout="tablet"] .grp{display:none}
+  [data-layout="tablet"] .part span{display:none}
+  [data-layout="tablet"] .part{padding:5px;min-width:0}
+  [data-layout="tablet"] #rail .set{flex-wrap:wrap}
+  :where([data-layout="tablet"]) button{padding:8px 7px}
+}

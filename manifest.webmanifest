@@ -1,0 +1,14 @@
+{
+  "name": "Logic Bench",
+  "short_name": "Logic Bench",
+  "description": "Build and test logic circuits from switches, gates and lamps.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#e9ecf1",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

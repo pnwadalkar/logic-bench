@@ -1,0 +1,162 @@
+/* Shared by both layouts: colours, the header, the sheet, the home page and the overlays.
+   desktop.css and tablet.css only place the parts rail and size things for a mouse or a finger. */
+:root{
+  --bg:#e9ecf1; --panel:#ffffff; --canvas:#f6f7fa; --body:#ffffff;
+  --line:#98a2b1; --grid:#ccd3dd; --wire:#9aa4b2;
+  --fg:#171b22; --muted:#646d7b; --hot:#e0700a; --accent:#2f52c8; --sel:#2f52c8;
+  --shade:rgba(23,27,34,.34);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1218; --panel:#161a22; --canvas:#0c0f15; --body:#1a1f29;
+  --line:#79838f; --grid:#222834; --wire:#59636f;
+  --fg:#e5e9f0; --muted:#8c96a5; --hot:#ff9b3d; --accent:#8ba6ff; --sel:#8ba6ff;
+  --shade:rgba(0,0,0,.6);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1218; --panel:#161a22; --canvas:#0c0f15; --body:#1a1f29;
+  --line:#79838f; --grid:#222834; --wire:#59636f;
+  --fg:#e5e9f0; --muted:#8c96a5; --hot:#ff9b3d; --accent:#8ba6ff; --sel:#8ba6ff;
+  --shade:rgba(0,0,0,.6);
+  color-scheme:dark}
+
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);overflow:hidden;
+  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none}
+#app{height:100%;display:flex;flex-direction:column;min-height:0}
+
+header{background:var(--panel);border-bottom:1px solid var(--grid);flex:none}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:9px}
+h1{margin:0;font:600 14px/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+h1 em{font-style:normal;color:var(--accent)}
+#docname{flex:none;width:128px;min-width:0;margin-left:4px;font:500 11px var(--mono);color:var(--fg);
+  background:transparent;border:1px solid transparent;border-radius:4px;padding:4px 6px}
+#docname:hover{border-color:var(--grid)}
+#docname:focus{outline:none;border-color:var(--accent);background:var(--canvas)}
+#dot{flex:none;width:6px;font:500 14px/1 var(--mono);color:var(--hot);visibility:hidden}
+#dot.on{visibility:visible}
+.spacer{flex:1 1 auto;min-width:8px}
+button{font:500 11px/1 var(--mono);letter-spacing:.04em;text-transform:uppercase;
+  color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:4px;
+  padding:9px 12px;cursor:pointer;touch-action:manipulation}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[disabled]{opacity:.38;cursor:default;border-color:var(--grid);color:var(--muted)}
+button.key{border-color:var(--accent);color:var(--accent)}
+button.danger{border-color:var(--hot);color:var(--hot)}
+button.danger:hover{border-color:var(--hot);color:var(--hot)}
+#count{font:400 11px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+#tip{font:400 11px/1.5 var(--sans);color:var(--muted)}
+
+#main{flex:1 1 auto;display:flex;min-height:0}
+#rail{flex:none;background:var(--panel);overscroll-behavior:contain;scrollbar-width:thin}
+.grp{font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+#rail .set{display:flex;gap:4px}
+.part{display:flex;align-items:center;border:1px solid transparent;
+  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.part:hover{border-color:var(--line);background:var(--canvas)}
+.part.on{border-color:var(--accent);background:var(--canvas)}
+.part.on span{color:var(--accent)}
+.part canvas{flex:none;display:block}
+.part span{font:500 11px/1 var(--mono);letter-spacing:.03em;white-space:nowrap}
+/* a rail tool with nothing loaded into it yet */
+.part.off{opacity:.4}
+/* test mode: the parts rail goes inert, so the sheet can only be driven, not edited */
+#rail.lock{opacity:.42;pointer-events:none}
+#stage{flex:1 1 auto;min-width:0;position:relative;background:var(--canvas)}
+#cv{display:block;width:100%;height:100%;touch-action:none;cursor:default}
+#ren{position:absolute;font:500 11px var(--mono);width:66px;padding:2px 4px;
+  border:1px solid var(--accent);border-radius:3px;background:var(--panel);color:var(--fg)}
+
+/* home page — every build as a card, and the one you pick is the one you work on */
+#home{position:fixed;inset:0;z-index:30;background:var(--bg);overflow-y:auto;overscroll-behavior:contain}
+.wrap{max-width:1040px;margin:0 auto;
+  padding-left:max(20px,env(safe-area-inset-left,0px));
+  padding-right:max(20px,env(safe-area-inset-right,0px));
+  padding-block:30px 48px}
+.homeTop{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.homeTop h1{font-size:16px}
+.homeTop p{margin:0;font:400 12px/1.5 var(--sans);color:var(--muted)}
+.homeAct{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:26px}
+.sect{font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 11px}
+#cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+#cards:empty::after{content:"No builds yet — press New build to start one.";
+  display:block;padding:16px 2px;font:400 12px/1.5 var(--sans);color:var(--muted)}
+.card{position:relative;background:var(--panel);border:1px solid var(--grid);border-radius:8px;overflow:hidden}
+.card:hover{border-color:var(--accent)}
+.card.now{border-color:var(--hot)}
+.card .go{display:block;width:100%;padding:0;border:0;border-radius:0;background:none;text-align:left;
+  font:inherit;color:inherit;letter-spacing:0;text-transform:none;cursor:pointer}
+.card .go:hover{color:inherit}
+.card canvas{display:block;width:100%;height:118px;background:var(--canvas);border-bottom:1px solid var(--grid)}
+.card b{display:block;font:500 12px/1.35 var(--mono);padding:9px 11px 0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card small{display:block;font:400 10px/1.4 var(--mono);color:var(--muted);padding:3px 11px 10px;
+  font-variant-numeric:tabular-nums}
+.card small i{font-style:normal;color:var(--hot)}
+/* every card carries its own actions in plain sight - there is no hover on a tablet */
+.card .acts{display:flex;gap:6px;padding:0 11px 11px}
+.card .acts button{flex:1 1 0;padding:9px 4px;font-size:10px}
+#homeNote{font:400 11px/1.5 var(--sans);color:var(--muted);margin:24px 0 0}
+
+/* the picker: a bar that rides over the boxed-in area, so copy and paste are
+   there to be clicked and not only typed */
+#pick{position:absolute;z-index:6;transform:translate(-50%,-100%);
+  display:flex;align-items:center;gap:6px;padding:6px 8px;
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 4px 16px var(--shade)}
+#pick span{font:500 10px/1 var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;padding-right:2px}
+#pick button{padding:5px 7px;font-size:10px}
+#pick .x{padding:4px 7px;font-size:12px;border-color:transparent;color:var(--muted)}
+#pick .x:hover{border-color:var(--hot);color:var(--hot)}
+/* the cleaner's passes, listed as they run, so the tidying can be followed */
+#steps{position:absolute;left:50%;top:14px;transform:translateX(-50%);
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:9px 13px;
+  max-width:min(92%,440px);box-shadow:0 4px 16px var(--shade);pointer-events:none;
+  opacity:0;transition:opacity .2s}
+#steps.show{opacity:1}
+#steps b{display:block;font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:7px}
+#steps ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
+#steps li{font:400 11px/1.45 var(--mono);color:var(--grid);display:flex;gap:8px;align-items:baseline}
+#steps li i{font-style:normal;flex:none;width:1em;text-align:right;font-variant-numeric:tabular-nums}
+#steps li.done{color:var(--muted)}
+#steps li.done i{color:var(--accent)}
+#steps li.now{color:var(--fg);font-weight:500}
+#steps li.now i{color:var(--hot)}
+/* a short confirmation over the sheet, for the things that happen outside the dialog */
+#toast{position:absolute;z-index:40;left:50%;bottom:18px;transform:translateX(-50%);max-width:min(90%,420px);
+  background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:7px 12px;
+  font:500 11px/1.35 var(--mono);letter-spacing:.03em;color:var(--fg);text-align:center;
+  box-shadow:0 4px 16px var(--shade);pointer-events:none;opacity:0;transition:opacity .18s}
+#toast.show{opacity:1}
+/* on the home page the toast floats over the whole screen */
+body>#toast{position:fixed;bottom:max(24px,env(safe-area-inset-bottom,0px))}
+/* zoom, docked in the sheet's bottom-right corner */
+#zoom{position:absolute;z-index:5;right:max(14px,env(safe-area-inset-right,0px));bottom:14px;display:flex;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;box-shadow:0 2px 10px var(--shade)}
+#zoom button{border:0;border-radius:0;padding:12px 14px;min-width:46px;font-size:13px}
+#zoom button+button{border-left:1px solid var(--grid)}
+#zPct{min-width:66px;font-variant-numeric:tabular-nums}
+/* the one dialog: a name to save or rename under, or a yes before a delete */
+#dlg{position:fixed;inset:0;z-index:50;background:var(--shade);display:flex;align-items:center;justify-content:center;padding:16px}
+#dlgBox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 20px 16px;
+  width:min(440px,100%);box-sizing:border-box;box-shadow:0 12px 40px var(--shade);margin:0}
+#dlgT{margin:0 0 6px;font:600 13px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+#dlgM{margin:0 0 14px;font:400 13px/1.5 var(--sans);color:var(--muted)}
+#dlgM:empty{display:none}
+#dlgIn{width:100%;box-sizing:border-box;font:500 16px var(--mono);padding:11px 12px;border:1px solid var(--line);
+  border-radius:6px;background:var(--canvas);color:var(--fg)}
+#dlgIn:focus{outline:none;border-color:var(--accent)}
+#dlgErr{min-height:1.4em;margin:8px 0 0;font:400 12px/1.4 var(--sans);color:var(--hot)}
+.dlgAct{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.dlgAct button{padding:11px 16px}
+[hidden]{display:none!important}
+
+@media (max-width:620px){
+  #pick span{display:none}
+  #steps{display:none}
+}
