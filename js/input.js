@@ -117,10 +117,10 @@ cv.addEventListener("pointerdown", function(e){
   }
   if (e.button !== 0 && e.pointerType === "mouse") return;
 
-  /* locked: a switch or button still answers the pointer, everything else only pans */
+  /* locked: the parts worked by hand still answer the pointer, everything else only pans */
   if (testMode){
     n = nodeAt(p);
-    if (n && (n.t === "SWITCH" || n.t === "BUTTON")){
+    if (n && TYPES[n.t].ctl){
       drag = {id:n.id, dx:0, dy:0, moved:false, lock:true};
       if (n.t === "BUTTON"){ n.s = 1; evaluate(); }
       draw(); return;
@@ -247,7 +247,7 @@ window.addEventListener("pointerup", function(e){
     n = byId.get(drag.id);
     if (n){
       if (n.t === "BUTTON"){ n.s = 0; evaluate(); }
-      else if (!drag.moved && n.t === "SWITCH"){ n.s = n.s ? 0 : 1; evaluate(); }
+      else if (!drag.moved && tapPart(n)){ /* a switch flipped, a hex input counted on, a clock sped up */ }
       else if (!drag.moved && !lock && isPt(n)){ pend = {kind:"out", id:n.id, p:0, pos:{x:n.x, y:n.y}}; }
       if (drag.moved){
         if (drag.spawn){
@@ -275,14 +275,32 @@ window.addEventListener("pointerup", function(e){
 cv.addEventListener("dblclick", function(e){
   if (testMode) return;
   var p = toWorld(e), n = pointAt(p) || nodeAt(p);
-  if (!n || (n.t !== "SWITCH" && n.t !== "BUTTON" && n.t !== "LAMP" && n.t !== "POINT")) return;
+  if (!n) return;
+  if (n.t === "RAM" || n.t === "ROM"){ editWords(n); return; }
   var r = cv.getBoundingClientRect(), st = $("#stage").getBoundingClientRect();
   ren.hidden = false;
   ren.style.left = (r.left - st.left + pan.x + n.x * zoom) + "px";
-  ren.style.top = (r.top - st.top + pan.y + n.y * zoom - 22) + "px";
+  ren.style.top = (r.top - st.top + pan.y + n.y * zoom - (TYPES[n.t].k === "chip" ? 30 : 22)) + "px";
   ren.value = n.l || ""; ren.dataset.id = n.id;
   ren.focus(); ren.select();
 });
+/* What a RAM or ROM holds, as sixteen hex digits, address 0 first — the one
+   dialog is enough to read it, program it, or wipe it. */
+function editWords(n){
+  var hex = words(n).map(function(v){ return v.toString(16).toUpperCase(); }).join("");
+  ask({title:(n.t === "ROM" ? "Program the ROM" : "RAM contents"), ok:"Store", value:hex,
+    msg:"Sixteen hex digits, 0–F, one per word: address 0 first, address F last.",
+    check:function(v){
+      v = (v || "").replace(/\s+/g, "");
+      return /^[0-9a-f]{16}$/i.test(v) ? "" : "That needs exactly sixteen hex digits (0–9, A–F).";
+    },
+    done:function(v){
+      pushUndo();
+      n.m = v.replace(/\s+/g, "").split("").map(function(ch){ return parseInt(ch, 16); });
+      commit();
+      flash((n.t === "ROM" ? "ROM programmed" : "RAM loaded") + " · Ctrl+Z puts the old contents back");
+    }});
+}
 ren.addEventListener("keydown", function(e){
   if (e.key === "Enter") ren.blur();
   if (e.key === "Escape") ren.hidden = true;

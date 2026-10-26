@@ -12,6 +12,8 @@
 [data-layout="desktop"] .grp{margin:2px 0 7px}
 [data-layout="desktop"] #rail .set{flex-direction:column}
 [data-layout="desktop"] .part{gap:7px;padding:3px 5px;border-radius:5px}
+/* the tabs wrap inside the rail rather than widening it */
+[data-layout="desktop"] .cats{width:0;min-width:100%;margin-bottom:8px}
 
 [data-layout="desktop"] #zoom{border-radius:6px}
 [data-layout="desktop"] #zoom button{padding:8px 10px;min-width:34px;font-size:12px}

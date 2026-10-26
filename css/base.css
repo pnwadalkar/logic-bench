@@ -63,6 +63,10 @@ button.danger:hover{border-color:var(--hot);color:var(--hot)}
 .part.on span{color:var(--accent)}
 .part canvas{flex:none;display:block}
 .part span{font:500 11px/1 var(--mono);letter-spacing:.03em;white-space:nowrap}
+/* the part families, a tab each */
+.cats{display:flex;flex-wrap:wrap;gap:3px}
+.cat{padding:4px 6px;font-size:9px;letter-spacing:.06em;border-color:var(--grid);color:var(--muted)}
+.cat.on{border-color:var(--accent);color:var(--accent);background:var(--canvas)}
 /* a rail tool with nothing loaded into it yet */
 .part.off{opacity:.4}
 /* test mode: the parts rail goes inert, so the sheet can only be driven, not edited */

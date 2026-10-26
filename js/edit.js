@@ -19,6 +19,13 @@ function addNode(t, x, y){
   nodes.push(n); reindex();
   return n;
 }
+/* A part's memory as plain data: a bit, a word or a charge is a number, a RAM or
+   ROM is sixteen words. Anything else is dropped. */
+function keepMem(m){
+  if (typeof m === "number" && isFinite(m)) return m;
+  if (Array.isArray(m) && m.length === 16) return m.map(function(v){ return (v | 0) & 15; });
+  return undefined;
+}
 /* A gate input holds one driver, so a fresh wire displaces whatever was there.
    A point is a junction: wires meet it from any side, so they all stay and the
    levels ride together. keep is a wire that must survive the sweep regardless. */
@@ -32,17 +39,17 @@ function connect(a, b){
   var o = a.kind === "out" ? a : b, i = a.kind === "in" ? a : b;
   if (o.id === i.id) return false;
   /* already wired exactly this way: no second line on top of the first */
-  if (wires.some(function(w){ return w.a === o.id && w.b === i.id && w.p === i.p; })) return false;
+  if (wires.some(function(w){ return w.a === o.id && (w.q | 0) === (o.p | 0) && w.b === i.id && w.p === i.p; })) return false;
   takeInput(i, null);
-  wires.push({id:"w" + (seq++), a:o.id, b:i.id, p:i.p});
+  wires.push({id:"w" + (seq++), a:o.id, q:o.p | 0, b:i.id, p:i.p});
   return true;
 }
 /* Drop the far end of a wire on bare sheet. The wire is real and editable;
    it simply carries nothing until the loose end lands on a port. */
 function loose(ph, p){
-  var w = {id:"w" + (seq++), a:null, b:null, p:0, fa:null, fb:null};
+  var w = {id:"w" + (seq++), a:null, q:0, b:null, p:0, fa:null, fb:null};
   var q = {x:Math.round(p.x / SNAP) * SNAP, y:Math.round(p.y / SNAP) * SNAP};
-  if (ph.kind === "out"){ w.a = ph.id; w.fb = q; }
+  if (ph.kind === "out"){ w.a = ph.id; w.q = ph.p | 0; w.fb = q; }
   else {
     w.b = ph.id; w.p = ph.p; w.fa = q;
     takeInput(ph, null);
@@ -64,7 +71,7 @@ function endAt(p){
 function dropEnd(we, p){
   var w = we.w, ph = portTarget(p, we.e === "a" ? "out" : "in");
   if (ph && ph.kind === (we.e === "a" ? "out" : "in")){
-    if (we.e === "a" && ph.id !== w.b){ w.a = ph.id; w.fa = null; return true; }
+    if (we.e === "a" && ph.id !== w.b){ w.a = ph.id; w.q = ph.p | 0; w.fa = null; return true; }
     if (we.e === "b" && ph.id !== w.a){
       takeInput(ph, w);
       w.b = ph.id; w.p = ph.p; w.fb = null; return true;
@@ -141,9 +148,11 @@ function clipFrom(){
   var rel = function(p){ return p ? {x:p.x - lo.x, y:p.y - lo.y} : null; };
   return {
     w:hi.x - lo.x, h:hi.y - lo.y, ox:lo.x, oy:lo.y,
-    nodes:ns.map(function(n){ return {t:n.t, x:n.x - lo.x, y:n.y - lo.y, s:n.s ? 1 : 0, l:n.l || ""}; }),
+    nodes:ns.map(function(n){
+      return {t:n.t, x:n.x - lo.x, y:n.y - lo.y, s:n.s | 0, l:n.l || "", c:n.c, m:keepMem(n.m)};
+    }),
     wires:ws.map(function(w){
-      return {a:w.a ? idx.get(w.a) : null, b:w.b ? idx.get(w.b) : null, p:w.p | 0,
+      return {a:w.a ? idx.get(w.a) : null, q:w.q | 0, b:w.b ? idx.get(w.b) : null, p:w.p | 0,
               fa:rel(w.fa), fb:rel(w.fb)};
     })
   };
@@ -191,13 +200,16 @@ function pasteClip(where){
        and only the parts the bench ever names are renamed at all */
     if (cn.l && !(AUTO.test(cn.l) && autoLabel(cn.t))) n.l = cn.l;
     n.s = cn.s;
+    /* a copy of a ROM holds the same program, a copied clock keeps its speed */
+    if (cn.c !== undefined) n.c = cn.c;
+    if (cn.m !== undefined) n.m = keepMem(cn.m);
     made.push(n);
   }
   clearPick();
   for (i = 0; i < made.length; i++) pickN.add(made[i].id);
   for (i = 0; i < clip.wires.length; i++){
     cw = clip.wires[i];
-    w = {id:"w" + (seq++), p:cw.p,
+    w = {id:"w" + (seq++), p:cw.p, q:cw.q | 0,
       a:cw.a === null ? null : made[cw.a].id,
       b:cw.b === null ? null : made[cw.b].id,
       fa:cw.fa ? {x:at.x + cw.fa.x, y:at.y + cw.fa.y} : null,

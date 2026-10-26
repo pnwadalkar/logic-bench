@@ -5,9 +5,17 @@
 function snapshot(){
   return {
     v:1, name:docName,
-    nodes:nodes.map(function(n){ return {id:n.id, t:n.t, x:n.x, y:n.y, s:n.s, l:n.l}; }),
+    nodes:nodes.map(function(n){
+      var o = {id:n.id, t:n.t, x:n.x, y:n.y, s:n.s, l:n.l};
+      /* a clock's speed, and what a memory part holds, go with the build */
+      if (n.c !== undefined) o.c = n.c;
+      if (keepMem(n.m) !== undefined) o.m = keepMem(n.m);
+      return o;
+    }),
     wires:wires.map(function(w){
-      return {id:w.id, a:w.a || null, b:w.b || null, p:w.p, fa:w.fa || null, fb:w.fb || null};
+      var o = {id:w.id, a:w.a || null, b:w.b || null, p:w.p, fa:w.fa || null, fb:w.fb || null};
+      if (w.q) o.q = w.q;
+      return o;
     }),
     seq:seq, pan:{x:pan.x, y:pan.y}, zoom:zoom
   };
@@ -16,15 +24,18 @@ function load(d){
   if (!d || !d.nodes || !d.nodes.length) return false;
   var ids = {};
   nodes = d.nodes.filter(function(n){ return n && n.id && TYPES[n.t]; }).map(function(n){
-    ids[n.id] = 1;
-    return {id:n.id, t:n.t, x:+n.x || 0, y:+n.y || 0, v:0, s:n.s ? 1 : 0, l:n.l || "", iv:[]};
+    ids[n.id] = nOut({t:n.t});
+    var o = {id:n.id, t:n.t, x:+n.x || 0, y:+n.y || 0, v:0, s:(n.s | 0) & 15, l:n.l || "", iv:[]};
+    if (typeof n.c === "number" && isFinite(n.c)) o.c = n.c;
+    if (keepMem(n.m) !== undefined) o.m = keepMem(n.m);
+    return o;
   });
   var pt = function(o){ return o && typeof o.x === "number" ? {x:+o.x, y:+o.y} : null; };
   wires = (d.wires || []).filter(function(w){
     if (!w) return false;
-    return !!((w.a ? ids[w.a] : pt(w.fa)) && (w.b ? ids[w.b] : pt(w.fb)));
+    return !!((w.a ? ids[w.a] > (w.q | 0) : pt(w.fa)) && (w.b ? ids[w.b] !== undefined : pt(w.fb)));
   }).map(function(w, i){
-    return {id:w.id || ("w" + (i + 1) + "r"), a:w.a || null, b:w.b || null, p:w.p | 0,
+    return {id:w.id || ("w" + (i + 1) + "r"), a:w.a || null, q:w.a ? w.q | 0 : 0, b:w.b || null, p:w.p | 0,
       fa:w.a ? null : pt(w.fa), fb:w.b ? null : pt(w.fb)};
   });
   seq = d.seq || nodes.length + wires.length + 2;
@@ -246,5 +257,18 @@ function example(){
     {id:"w5", a:x.id, b:s.id, p:0}, {id:"w6", a:n.id, b:cy.id, p:0}
   ];
   seq = 20; docName = freeName("Half adder"); docDirty = true;
+  commit();
+}
+/* Counter: a clock stepping a 4-bit counter, read out on a hex display, with the
+   carry lit at F — the program counter of a CPU, ticking. */
+function example2(){
+  keepBuild();
+  nodes = []; wires = []; seq = 1; pan = {x:0, y:0}; zoom = ZDEF; zoomShow(); clearPick(); pend = null; cascade = 0;
+  var k = addNode("CLOCK", 60, 168), c = addNode("CNT4", 168, 84);
+  var d = addNode("HEXD", 324, 120), co = addNode("LAMP", 336, 228), i;
+  k.l = "CLK"; co.l = "Carry";
+  wires = [{id:"w1", a:k.id, q:0, b:c.id, p:6}, {id:"w6", a:c.id, q:4, b:co.id, p:0}];
+  for (i = 0; i < 4; i++) wires.push({id:"w" + (i + 2), a:c.id, q:i, b:d.id, p:i});
+  seq = 20; docName = freeName("Counter"); docDirty = true;
   commit();
 }

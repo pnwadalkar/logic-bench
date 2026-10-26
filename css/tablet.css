@@ -19,6 +19,8 @@
 [data-layout="tablet"] #rail .set{flex-direction:row;gap:2px}
 [data-layout="tablet"] .part{flex-direction:column;gap:3px;padding:4px 4px 5px;border-radius:6px}
 [data-layout="tablet"] .part span{font-size:10px}
+[data-layout="tablet"] .cats{gap:4px;margin-bottom:6px}
+[data-layout="tablet"] .cat{padding:8px 10px;font-size:10px}
 /* the console pictures a size up from the desktop rail, for fingers */
 [data-layout="tablet"] .part canvas{width:56px!important;height:38px!important}
 

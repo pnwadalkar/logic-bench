@@ -12,17 +12,32 @@ function findNode(ref){
   return null;
 }
 window.bench = {
-  /* bench.wire(from, to, inputIndex) — refs are a label ("A"), an id ("n3") or a type ("XOR") */
-  wire:function(from, to, port){
+  /* bench.wire(from, to, inputIndex, outputIndex) — refs are a label ("A"), an id
+     ("n3") or a type ("XOR"); the output index picks one of a chip's outputs */
+  wire:function(from, to, port, out){
     var a = findNode(from), b = findNode(to);
     if (!a || !b) return "no such part: " + (a ? to : from);
     if (!hasOut(a)) return a.t + " has no output";
     if (!nIn(b)) return b.t + " has no inputs";
-    var p = port === undefined ? 0 : port | 0;
+    var p = port === undefined ? 0 : port | 0, q = out === undefined ? 0 : out | 0;
     if (p < 0 || p >= nIn(b)) return "input index out of range (0.." + (nIn(b) - 1) + ")";
-    connect({kind:"out", id:a.id, p:0}, {kind:"in", id:b.id, p:p});
+    if (q < 0 || q >= nOut(a)) return "output index out of range (0.." + (nOut(a) - 1) + ")";
+    connect({kind:"out", id:a.id, p:q}, {kind:"in", id:b.id, p:p});
     commit();
-    return (a.l || a.t) + " → " + (b.l || b.t) + "[" + p + "]";
+    return (a.l || a.t) + (nOut(a) > 1 ? "[" + q + "]" : "") + " → " + (b.l || b.t) + "[" + p + "]";
+  },
+  /* bench.parts() — every kind of part, by family */
+  parts:function(){
+    var o = {};
+    CATS.forEach(function(g){ o[g.n] = g.t.map(function(t){ return t + " (" + TYPES[t].n + ")"; }); });
+    return o;
+  },
+  /* bench.tick(n) — step time on n times at once: clocks, capacitors, inductors */
+  tick:function(k){
+    for (var i = 0; i < (k === undefined ? 1 : k | 0); i++) tickNow();
+    return nodes.filter(function(n){ return TYPES[n.t].tm; }).map(function(n){
+      return {id:n.id, type:n.t, out:n.v, charge:n.t === "CLOCK" ? undefined : n.m};
+    });
   },
   /* bench.add("AND", x, y) → the new part */
   add:function(t, x, y){
@@ -32,12 +47,24 @@ window.bench = {
     commit();
     return {id:n.id, type:n.t, label:n.l, x:n.x, y:n.y};
   },
-  /* bench.set("A", 1) — flip a switch or button */
+  /* bench.set("A", 1) — flip a switch or button, or set a hex input to 0–15 */
   set:function(ref, v){
     var n = findNode(ref);
-    if (!n || (n.t !== "SWITCH" && n.t !== "BUTTON")) return "not a switch or button";
+    if (n && n.t === "HEXIN"){ n.s = (v | 0) & 15; commit(); return (n.l || n.id) + " = " + n.s; }
+    if (!n || (n.t !== "SWITCH" && n.t !== "BUTTON")) return "not a switch, button or hex input";
     n.s = v ? 1 : 0; commit();
     return (n.l || n.id) + " = " + n.s;
+  },
+  /* bench.mem("n4") — what a RAM or ROM holds; bench.mem("n4", "0123456789ABCDEF") to load it */
+  mem:function(ref, hex){
+    var n = findNode(ref);
+    if (!n || (n.t !== "RAM" && n.t !== "ROM")) return "not a RAM or ROM";
+    if (hex !== undefined){
+      hex = String(hex).replace(/\s+/g, "");
+      if (!/^[0-9a-f]{16}$/i.test(hex)) return "sixteen hex digits, please";
+      n.m = hex.split("").map(function(ch){ return parseInt(ch, 16); }); commit();
+    }
+    return words(n).map(function(v){ return v.toString(16).toUpperCase(); }).join("");
   },
   /* bench.cut("A", "Sum") or bench.cut("w7") — drop a wire */
   cut:function(from, to){
@@ -55,14 +82,14 @@ window.bench = {
   /* bench.ports() — what is on the sheet, with live values */
   ports:function(){
     return nodes.map(function(n){
-      return {id:n.id, type:n.t, label:n.l, out:n.v, ins:nIn(n), x:n.x, y:n.y};
+      return {id:n.id, type:n.t, label:n.l, out:n.v, outs:(n.ov || []).slice(), ins:nIn(n), x:n.x, y:n.y};
     });
   },
   list:function(){
     return wires.map(function(w){
       var a = w.a ? byId.get(w.a) : null, b = w.b ? byId.get(w.b) : null;
       return {id:w.id, from:(a && (a.l || a.t)) || "loose end",
-        to:(b && (b.l || b.t)) || "loose end", input:w.p, level:a ? a.v : 0};
+        to:(b && (b.l || b.t)) || "loose end", output:w.q | 0, input:w.p, level:a ? lvl(a, w.q) : 0};
     });
   },
   /* bench.pick(x, y, w, h) — box in a region, the way dragging a band does */
@@ -99,7 +126,8 @@ window.bench = {
   builds:function(){ return Object.keys(libRead()); },
   json:function(){ return snapshot(); },
   load:function(d){ if (load(typeof d === "string" ? JSON.parse(d) : d)){ docDirty = true; commit(); return "loaded"; } return "nothing to load"; },
-  example:example,
+  /* bench.example() — the half adder; bench.example("counter") — the clocked counter */
+  example:function(which){ if (which === "counter") example2(); else example(); return docName; },
   name:function(s){ renameBuild(String(s || "")); return docName; },
   mode:function(on){ setWireMode(on === undefined ? !wireMode : on); return wireMode ? "wire mode on" : "wire mode off"; },
   /* bench.test() / bench.test(true) / bench.test(false) — lock the sheet and drive it */

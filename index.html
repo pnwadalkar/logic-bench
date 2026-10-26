@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="description" content="Logic Bench — build and test logic circuits from switches, gates and lamps.">
+<meta name="description" content="Logic Bench — build and test circuits from switches, gates, transistors, chips and memory, all the way up to the parts of a computer.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#161a22" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -45,10 +45,9 @@
     <aside id="rail">
       <div class="gp"><p class="grp">Tools</p>
       <div class="set" id="setT"></div></div>
-      <div class="gp"><p class="grp">Signals</p>
-      <div class="set" id="setIO"></div></div>
-      <div class="gp"><p class="grp">Gates</p>
-      <div class="set" id="setG"></div></div>
+      <div class="gp" id="gpParts"><p class="grp">Parts</p>
+      <div class="cats" id="cats" role="tablist" aria-label="Part families"></div>
+      <div class="set" id="setP" role="tabpanel"></div></div>
     </aside>
     <div id="stage">
       <canvas id="cv"></canvas>
@@ -82,6 +81,7 @@
     <div class="homeAct">
       <button id="hNew" class="key" type="button">New build</button>
       <button id="hEg" type="button">Half adder example</button>
+      <button id="hEg2" type="button" title="A clock driving a counter, read out on a hex display">Counter example</button>
       <button id="hSave" type="button" title="Download every build as one file, to keep safe or carry to another device">Back up all</button>
       <button id="hLoad" type="button" title="Bring builds back in from a backup file">Restore</button>
       <input id="hFile" type="file" accept=".json,application/json" hidden>
@@ -107,6 +107,7 @@
 <!-- classic scripts sharing one scope, in dependency order; main.js boots the bench -->
 <script src="js/core.js"></script>
 <script src="js/shapes.js"></script>
+<script src="js/symbols.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/render.js"></script>
 <script src="js/edit.js"></script>
@@ -114,6 +115,7 @@
 <script src="js/input.js"></script>
 <script src="js/rail.js"></script>
 <script src="js/builds.js"></script>
+<script src="js/timing.js"></script>
 <script src="js/api.js"></script>
 <script src="js/home.js"></script>
 <script src="js/fullscreen.js"></script>

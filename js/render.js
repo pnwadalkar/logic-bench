@@ -8,13 +8,13 @@ function draw(){
   requestAnimationFrame(function(){ queued = false; render(); });
 }
 /* Either end of a wire is a port on a part, or a loose point on the sheet. */
-function endA(w){ var n = w.a ? byId.get(w.a) : null; return n ? outPort(n) : w.fa; }
+function endA(w){ var n = w.a ? byId.get(w.a) : null; return n ? outPort(n, w.q) : w.fa; }
 function endB(w){ var n = w.b ? byId.get(w.b) : null; return n ? inPort(n, w.p) : w.fb; }
 function wirePath(c, p1, p2){
   c.beginPath(); c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y);
 }
 function render(){
-  var W = cv.clientWidth, H = cv.clientHeight, i, j, n, w, a, b, pt, bx, at, gh;
+  var W = cv.clientWidth, H = cv.clientHeight, i, j, n, w, a, b, pt, bx, at, gh, on;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
   ctx.translate(Math.round(pan.x), Math.round(pan.y));
@@ -30,13 +30,17 @@ function render(){
       ctx.strokeStyle = C.sel; ctx.lineWidth = 4; ctx.globalAlpha = 0.35;
       wirePath(ctx, bx, pt); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 2;
     }
-    ctx.strokeStyle = (a && a.v) ? C.hot : C.wire;
+    on = a ? lvl(a, w.q) : 0;
+    ctx.strokeStyle = on ? C.hot : C.wire;
+    /* a wire nothing is driving — an off transistor's, say — is drawn broken */
+    if (a && w.b && floats(a, w.q)) ctx.setLineDash([5, 4]);
     wirePath(ctx, bx, pt); ctx.stroke();
+    ctx.setLineDash([]);
     /* an unfinished end gets an open ring, so a loose wire reads as loose */
     if (!w.a || !w.b){
       ctx.beginPath(); ctx.arc(w.a ? pt.x : bx.x, w.a ? pt.y : bx.y, 4, 0, 7);
       ctx.fillStyle = C.canvas; ctx.fill();
-      ctx.strokeStyle = (a && a.v) ? C.hot : C.line; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.strokeStyle = on ? C.hot : C.line; ctx.lineWidth = 1.6; ctx.stroke();
       ctx.lineWidth = 2;
     }
   }
@@ -66,7 +70,7 @@ function render(){
         /* one marker: a point's two ports share the dot */
         ctx.beginPath(); ctx.arc(n.x, n.y, PTR + 2.5, 0, 7); ctx.fill();
       } else {
-        if (hasOut(n)){ pt = outPort(n); ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, 7); ctx.fill(); }
+        for (j = 0; j < nOut(n); j++){ pt = outPort(n, j); ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, 7); ctx.fill(); }
         for (j = 0; j < nIn(n); j++){ pt = inPort(n, j); ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, 7); ctx.fill(); }
       }
       ctx.globalAlpha = 1;
@@ -88,14 +92,14 @@ function render(){
     at = {x:Math.round((hover.x - clip.w / 2) / SNAP) * SNAP,
           y:Math.round((hover.y - clip.h / 2) / SNAP) * SNAP};
     gh = clip.nodes.map(function(cn){
-      return {id:"g", t:cn.t, x:at.x + cn.x, y:at.y + cn.y, s:cn.s, v:0, l:cn.l, iv:[]};
+      return {id:"g", t:cn.t, x:at.x + cn.x, y:at.y + cn.y, s:cn.s, v:0, l:cn.l, c:cn.c, m:cn.m, iv:[]};
     });
     ctx.save();
     ctx.globalAlpha = 0.5;
     ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.strokeStyle = C.wire;
     for (i = 0; i < clip.wires.length; i++){
       w = clip.wires[i];
-      a = w.a === null ? (w.fa ? {x:at.x + w.fa.x, y:at.y + w.fa.y} : null) : outPort(gh[w.a]);
+      a = w.a === null ? (w.fa ? {x:at.x + w.fa.x, y:at.y + w.fa.y} : null) : outPort(gh[w.a], w.q);
       pt = w.b === null ? (w.fb ? {x:at.x + w.fb.x, y:at.y + w.fb.y} : null) : inPort(gh[w.b], w.p);
       if (!a || !pt) continue;
       wirePath(ctx, a, pt); ctx.stroke();
@@ -120,14 +124,20 @@ function toWorld(e){
   return {x:(e.clientX - r.left - pan.x) / zoom, y:(e.clientY - r.top - pan.y) / zoom};
 }
 function near(p, q, d){ var dx = p.x - q.x, dy = p.y - q.y; return dx * dx + dy * dy <= d * d; }
+/* The nearest port within reach. A chip's pins sit closer together than the
+   reach, so it is the nearest that counts, not the first one found. */
 function portAt(p){
-  var i, j, n, pt;
+  var i, j, n, pt, best = null, bd = PORT * PORT + 0.01, d2;
+  var see = function(kind, n, j, pt){
+    d2 = (pt.x - p.x) * (pt.x - p.x) + (pt.y - p.y) * (pt.y - p.y);
+    if (d2 < bd){ bd = d2; best = {kind:kind, id:n.id, p:j, pos:pt}; }
+  };
   for (i = nodes.length - 1; i >= 0; i--){
     n = nodes[i];
-    if (hasOut(n)){ pt = outPort(n); if (near(p, pt, PORT)) return {kind:"out", id:n.id, p:0, pos:pt}; }
-    for (j = 0; j < nIn(n); j++){ pt = inPort(n, j); if (near(p, pt, PORT)) return {kind:"in", id:n.id, p:j, pos:pt}; }
+    for (j = 0; j < nOut(n); j++) see("out", n, j, outPort(n, j));
+    for (j = 0; j < nIn(n); j++) see("in", n, j, inPort(n, j));
   }
-  return null;
+  return best;
 }
 function nodeAt(p){
   var i, n, b;
@@ -146,13 +156,14 @@ function pointAt(p){
   }
   return null;
 }
-function nearestIn(n, p){
-  var best = 0, bd = Infinity, j, pt, d2;
-  for (j = 0; j < nIn(n); j++){
-    pt = inPort(n, j); d2 = (pt.x - p.x) * (pt.x - p.x) + (pt.y - p.y) * (pt.y - p.y);
+function nearestPort(n, p, kind){
+  var best = 0, bd = Infinity, j, pt, d2, k = kind === "in" ? nIn(n) : nOut(n);
+  var at = function(j){ return kind === "in" ? inPort(n, j) : outPort(n, j); };
+  for (j = 0; j < k; j++){
+    pt = at(j); d2 = (pt.x - p.x) * (pt.x - p.x) + (pt.y - p.y) * (pt.y - p.y);
     if (d2 < bd){ bd = d2; best = j; }
   }
-  return {kind:"in", id:n.id, p:best, pos:inPort(n, best)};
+  return {kind:kind, id:n.id, p:best, pos:at(best)};
 }
 /* A port under the pointer, or the most plausible port of the part under it. */
 function portTarget(p, want){
@@ -160,10 +171,10 @@ function portTarget(p, want){
   if (ph && (!want || ph.kind === want)) return ph;
   n = pointAt(p) || nodeAt(p);
   if (!n) return null;
-  if (want === "out") return hasOut(n) ? {kind:"out", id:n.id, p:0, pos:outPort(n)} : null;
-  if (want === "in") return nIn(n) ? nearestIn(n, p) : null;
-  if (hasOut(n)) return {kind:"out", id:n.id, p:0, pos:outPort(n)};
-  return nIn(n) ? nearestIn(n, p) : null;
+  if (want === "out") return hasOut(n) ? nearestPort(n, p, "out") : null;
+  if (want === "in") return nIn(n) ? nearestPort(n, p, "in") : null;
+  if (hasOut(n)) return nearestPort(n, p, "out");
+  return nIn(n) ? nearestPort(n, p, "in") : null;
 }
 function onSeg(p, a, b){
   var vx = b.x - a.x, vy = b.y - a.y, len = vx * vx + vy * vy, t = 0;

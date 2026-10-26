@@ -19,7 +19,7 @@ function thumb(c, d){
     hi.x = Math.max(hi.x, x2); hi.y = Math.max(hi.y, y2);
   };
   var ns = (d.nodes || []).filter(function(n){ return n && n.id && TYPES[n.t]; })
-    .map(function(n){ return {id:n.id, t:n.t, x:n.x, y:n.y, s:n.s ? 1 : 0, v:0, l:"", iv:[]}; });
+    .map(function(n){ return {id:n.id, t:n.t, x:n.x, y:n.y, s:n.s | 0, c:n.c, m:n.m, v:0, l:"", iv:[]}; });
   if (!ns.length) return;
   for (i = 0; i < ns.length; i++){
     map.set(ns[i].id, ns[i]);
@@ -27,7 +27,7 @@ function thumb(c, d){
   }
   var ws = (d.wires || []).map(function(w){
     var a = w.a ? map.get(w.a) : null, z = w.b ? map.get(w.b) : null;
-    var q1 = a ? outPort(a) : (w.fa || null), q2 = z ? inPort(z, w.p | 0) : (w.fb || null);
+    var q1 = a ? outPort(a, w.q) : (w.fa || null), q2 = z ? inPort(z, w.p | 0) : (w.fb || null);
     if (q1) seen(q1.x, q1.y, q1.x, q1.y);
     if (q2) seen(q2.x, q2.y, q2.x, q2.y);
     return (q1 && q2) ? {a:q1, b:q2} : null;
@@ -137,6 +137,7 @@ $("#hNew").addEventListener("click", function(){
   flash("New sheet · drag a part in from the rail");
 });
 $("#hEg").addEventListener("click", function(){ example(); enterBench(); });
+$("#hEg2").addEventListener("click", function(){ example2(); enterBench(); });
 /* Back up: every build in one file, for safe keeping or another device. */
 $("#hSave").addEventListener("click", function(){
   keepBuild();

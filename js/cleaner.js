@@ -79,7 +79,7 @@ function dissolvePoints(){
       for (j = 0; j < outs.length; j++)
         if (!outs[j].b || outs[j].b === ins[0].a) ok = false;  /* loose end, or self-wiring */
       if (!ok) continue;
-      for (j = 0; j < outs.length; j++) outs[j].a = ins[0].a;
+      for (j = 0; j < outs.length; j++){ outs[j].a = ins[0].a; outs[j].q = ins[0].q | 0; }
       wires.splice(wires.indexOf(ins[0]), 1);
       nodes.splice(i, 1);
       cut++;
@@ -88,7 +88,7 @@ function dissolvePoints(){
     /* the splice can leave two identical wires on one input; one of them is enough */
     wires = wires.filter(function(w){
       if (!w.a || !w.b) return true;
-      var key = w.a + ">" + w.b + ":" + w.p;
+      var key = w.a + "." + (w.q | 0) + ">" + w.b + ":" + w.p;
       if (seen[key]) return false;
       seen[key] = 1; return true;
     });
@@ -125,12 +125,13 @@ function colOf(){
      the middle of an adder, the sum lamps somewhere off its right. So the lamps
      are taken out of the count and all put in one column of their own, past the
      right-hand end of the wiring: whatever reaches a lamp early simply carries
-     on level until it gets there, and every answer is read off one edge. */
+     on level until it gets there, and every answer is read off one edge. The
+     displays are readouts too — anything with no output is — and go with them. */
   last = -1;
   for (i = 0; i < nodes.length; i++)
-    if (nodes[i].t !== "LAMP") last = Math.max(last, col.get(nodes[i].id));
+    if (hasOut(nodes[i])) last = Math.max(last, col.get(nodes[i].id));
   for (i = 0; i < nodes.length; i++)
-    if (nodes[i].t === "LAMP") col.set(nodes[i].id, last + 1);
+    if (!hasOut(nodes[i])) col.set(nodes[i].id, last + 1);
   return col;
 }
 /* The parts of each column, left to right. */
@@ -325,7 +326,7 @@ function stackY(bands){
 /* Both ends of a wire, as the parts they sit on and the points they are drawn to. */
 function ends(w){
   var a = w.a ? byId.get(w.a) : null, b = w.b ? byId.get(w.b) : null;
-  var pa = a ? outPort(a) : w.fa, pb = b ? inPort(b, w.p) : w.fb;
+  var pa = a ? outPort(a, w.q) : w.fa, pb = b ? inPort(b, w.p) : w.fb;
   if (!pa || !pb) return null;
   return {w:w, a:a, b:b, pa:pa, pb:pb};
 }
@@ -596,13 +597,14 @@ function laneFree(x, lo, hi){
   return true;
 }
 function elbows(bad){
-  var byOut = new Map(), i, e, made = 0, groups = [], taken = {};
+  var byOut = new Map(), i, e, k, made = 0, groups = [], taken = {};
   for (i = 0; i < bad.length; i++){
     e = ends(bad[i]);
     if (!e || !e.a || !e.b) continue;
     if (Math.abs(e.pb.y - e.pa.y) <= LEAN) continue;     /* it came out straight anyway */
-    if (!byOut.has(e.a.id)) byOut.set(e.a.id, []);
-    byOut.get(e.a.id).push(e);
+    k = e.a.id + "." + (e.w.q | 0);          /* one trunk per output, not per part */
+    if (!byOut.has(k)) byOut.set(k, []);
+    byOut.get(k).push(e);
   }
   /* Lanes are handed out by where the runs are on the sheet, never by the order
      the wires happen to sit in the list: that order is shuffled every time a
@@ -616,7 +618,7 @@ function elbows(bad){
       return p.pb.y - q.pb.y || p.pb.x - q.pb.x ||
              (p.w.b < q.w.b ? -1 : p.w.b > q.w.b ? 1 : 0) || (p.w.p | 0) - (q.w.p | 0);
     });
-    groups.push({g:g, near:Math.round(near), y:g[0].pa.y, x:g[0].pa.x, src:g[0].w.a});
+    groups.push({g:g, near:Math.round(near), y:g[0].pa.y, x:g[0].pa.x, src:g[0].w.a + "." + (g[0].w.q | 0)});
   });
   /* The last word is the output's own id. Everything before it can tie — a sheet
      is full of parts at matching heights — and what settles a tie otherwise is
@@ -635,7 +637,7 @@ function elbows(bad){
   var lanes = {};
   groups.forEach(function(it){
     var g = it.g;
-    var src = g[0].w.a, pa = g[0].pa, near = it.near, lane, col, trunk, p2, i, lo, hi, try2;
+    var src = g[0].w.a, sq = g[0].w.q | 0, pa = g[0].pa, near = it.near, lane, col, trunk, p2, i, lo, hi, try2;
     lane = lanes[near] = (lanes[near] || 0) + 1;
     /* The turn is made in the blank gap in front of the column being fed, a lane
        further back for each further output that has to turn. Two trunks on one
@@ -658,11 +660,11 @@ function elbows(bad){
     }
     taken[col] = 1;
     trunk = addNode("POINT", col, pa.y);
-    wires.push({id:"w" + (seq++), a:src, b:trunk.id, p:0, fa:null, fb:null});
+    wires.push({id:"w" + (seq++), a:src, q:sq, b:trunk.id, p:0, fa:null, fb:null});
     for (i = 0; i < g.length; i++){
       p2 = addNode("POINT", col, g[i].pb.y);
-      wires.push({id:"w" + (seq++), a:trunk.id, b:p2.id, p:0, fa:null, fb:null});
-      g[i].w.a = p2.id; g[i].w.fa = null;
+      wires.push({id:"w" + (seq++), a:trunk.id, q:0, b:p2.id, p:0, fa:null, fb:null});
+      g[i].w.a = p2.id; g[i].w.q = 0; g[i].w.fa = null;
       made++;
     }
   });

@@ -91,6 +91,8 @@ function drawPart(c, n, stub){
     c.moveTo(cx - r * 0.42, cy - r * 0.42); c.lineTo(cx + r * 0.42, cy + r * 0.42);
     c.moveTo(cx + r * 0.42, cy - r * 0.42); c.lineTo(cx - r * 0.42, cy + r * 0.42);
     c.strokeStyle = on ? C.body : C.line; c.lineWidth = 1.2; c.stroke();
+  } else if (DRAW[d.k]){
+    DRAW[d.k](c, n, stub);               /* chips and components: symbols.js */
   } else {
     drawGate(c, n.t, n.x, n.y, w, h, stub, n.iv, n.v);
   }
@@ -98,6 +100,8 @@ function drawPart(c, n, stub){
     c.font = MONO; c.fillStyle = C.muted; c.textBaseline = "middle";
     if (d.k === "pt"){ c.textAlign = "left"; c.fillText(n.l, n.x + PTR + 6, n.y - PTR - 3); }
     else if (d.k === "lamp"){ c.textAlign = "left"; c.fillText(n.l, n.x + w + 7, n.y + h / 2); }
+    /* a chip has pins down its left side, so its name goes over the top */
+    else if (d.k === "chip"){ c.textAlign = "left"; c.fillText(n.l, n.x, n.y - 8); }
     else { c.textAlign = "right"; c.fillText(n.l, n.x - stub - 5, n.y + h / 2); }
   }
 }

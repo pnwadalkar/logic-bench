@@ -97,6 +97,15 @@ function railIcon(t){
     fake = {t:t, x:x + (d.k === "lamp" ? 6 : 2), y:(34 - d.h) / 2, v:0, s:0, l:"", iv:[]};
     drawPart(g, fake, s);
     d.w = save.w; d.h = save.h;
+  } else if (d.k === "chip"){
+    chipIcon(g, t);
+  } else if (DRAW[d.k]){
+    /* a component drawn as it is on the sheet, shrunk to fit the tile */
+    var lead = (d.ins ? s : 0) + s, k = Math.min(1, 42 / (d.w + lead), 28 / d.h);
+    fake = {t:t, x:0, y:0, v:0, s:t === "CLOCK" ? 1 : 0, l:"", iv:[], m:t === "CAP" ? 0.6 : 0};
+    g.translate((50 - (d.w + lead) * k) / 2 + (d.ins ? s * k : 0), (34 - d.h * k) / 2);
+    g.scale(k, k);
+    drawPart(g, fake, s);
   } else {
     drawGate(g, t, x, y, w, h, s, null, 0);
   }
@@ -144,10 +153,28 @@ function buildRail(){
   item($("#setT"), "CLEAN", "Cleaner", cleanIcon(), function(e){
     e.preventDefault(); cleanUp();
   }, "Cleaner looks: lay the circuit out in columns, keep the inputs in the order you drew them, gather the lamps in one column down the right-hand edge, straighten every wire, square the corners and squeeze out the dead space (C)");
-  var mk = function(host, list){
-    host.textContent = "";
-    list.forEach(function(t){ item(host, t, TYPES[t].n, railIcon(t), spawn(t)); });
+  /* The parts come in families, one tab each, so the rail stays short enough to
+     take in at a glance however many kinds of part there are. */
+  var cats = $("#cats"), set = $("#setP");
+  var show = function(k){
+    railCat = k;
+    try { localStorage.setItem(CATKEY, String(k)); } catch (err) {}
+    Array.prototype.forEach.call(cats.children, function(b, i){
+      b.classList.toggle("on", i === k); b.setAttribute("aria-selected", i === k ? "true" : "false");
+    });
+    set.textContent = "";
+    CATS[k].t.forEach(function(t){ item(set, t, TYPES[t].n, railIcon(t), spawn(t), TYPES[t].tip); });
   };
-  mk($("#setIO"), IO); mk($("#setG"), GATES);
+  cats.textContent = "";
+  CATS.forEach(function(g, i){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "cat"; b.textContent = g.n;
+    b.setAttribute("role", "tab");
+    b.addEventListener("click", function(){ show(i); });
+    cats.appendChild(b);
+  });
+  show(railCat >= 0 && railCat < CATS.length ? railCat : 0);
   markTool();
 }
+var CATKEY = "logicbench.cat", railCat = 0;
+try { railCat = parseInt(localStorage.getItem(CATKEY) || "0", 10) || 0; } catch (err) {}
