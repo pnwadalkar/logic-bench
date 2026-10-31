@@ -57,15 +57,18 @@ async function readJson(key) {
   if (!KEY.test(key)) throw new StoreError("BADKEY", "Bad storage key.");
   if (kvMod.configured()) {
     const text = await kvMod.kv().get(key);
-    return text ? JSON.parse(text) : null;
+    if (text) return JSON.parse(text);
+    /* Redis connected after accounts were made in Blob: an account or its builds
+       that Redis does not have yet are read from Blob once and copied across.
+       Sessions are not carried over; signing in again makes a new one. */
+    if (blobConfigured() && key.indexOf("logic-bench/sessions/") !== 0) {
+      const old = await readBlob(key);
+      if (old) await kvMod.kv().set(key, JSON.stringify(old), { nx: true });
+      return old;
+    }
+    return null;
   }
-  if (blobConfigured()) {
-    const { get } = await blobApi();
-    const result = await get(key, { access: "private", useCache: false });
-    if (!result || result.statusCode !== 200 || !result.stream) return null;
-    const text = await streamText(result.stream);
-    return text ? JSON.parse(text) : null;
-  }
+  if (blobConfigured()) return readBlob(key);
   if (process.env.VERCEL) {
     throw new StoreError("UNAVAILABLE",
       "Account storage is not connected. In the Vercel project open Storage, add Upstash for Redis (or a private Blob store), connect it to this project, and redeploy.");
@@ -78,12 +81,22 @@ async function readJson(key) {
   }
 }
 
+async function readBlob(key) {
+  const { get } = await blobApi();
+  const result = await get(key, { access: "private", useCache: false });
+  if (!result || result.statusCode !== 200 || !result.stream) return null;
+  const text = await streamText(result.stream);
+  return text ? JSON.parse(text) : null;
+}
+
 async function writeJson(key, value, exclusive) {
   if (!KEY.test(key)) throw new StoreError("BADKEY", "Bad storage key.");
   const body = JSON.stringify(value);
   if (kvMod.configured()) {
     const opt = { nx: !!exclusive };
     if (key.indexOf("logic-bench/sessions/") === 0) opt.ex = SESSION_TTL;
+    /* a name taken back when accounts lived in Blob is still taken */
+    if (exclusive && blobConfigured() && await readJson(key)) throw new StoreError("EXISTS", "Already there.");
     if (!await kvMod.kv().set(key, body, opt)) throw new StoreError("EXISTS", "Already there.");
     return;
   }
@@ -130,3 +143,5 @@ async function remove(key) {
 }
 
 module.exports = { readJson, writeJson, remove };
+/* for tests only: stand in for @vercel/blob */
+module.exports._useBlob = function (mod) { blobMod = Promise.resolve(mod); };

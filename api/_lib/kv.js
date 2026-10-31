@@ -187,4 +187,4 @@ function kv() {
   return (client = memory());
 }
 
-module.exports = { kv, configured, SYNC_LUA, FULL_LUA, flatToObj };
+module.exports = { kv, configured, SYNC_LUA, FULL_LUA, flatToObj, _memory: memory };
