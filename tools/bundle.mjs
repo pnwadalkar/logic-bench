@@ -25,9 +25,10 @@ html = html.replace(/<script src="([^"]+)"><\/script>\n?/g, (_, src) =>
 /* no network at all: the icon goes inline, the manifest and the font preload go */
 html = html
   .replace(/<link rel="icon" href="([^"]+)"[^>]*>/, (_, href) => `<link rel="icon" href="${dataUrl(href, "image/svg+xml")}">`)
-  .replace(/<link rel="(?:manifest|preload)"[^>]*>\n/g, "");
+  .replace(/<link rel="(?:manifest|preload)"[^>]*>\r?\n/g, "");
 
-if (/\b(?:src|href)="(?!data:|#)[^"]+"/.test(html)) throw new Error("bundle still points at an outside file");
+const outside = html.match(/\b(?:src|href)="(?!data:|#)[^"]+"/);
+if (outside) throw new Error("bundle still points at an outside file: " + outside[0]);
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, html);
 console.log(`wrote ${path.relative(process.cwd(), out)} (${Math.round(html.length / 1024)} KB)`);

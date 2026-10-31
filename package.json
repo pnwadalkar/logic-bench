@@ -4,7 +4,10 @@
   "private": true,
   "description": "Build and test logic circuits from switches, gates and lamps, in the browser.",
   "scripts": {
-    "dev": "npx --yes serve@14 -l 3000 .",
+    "dev": "node tools/dev-server.mjs 3000",
     "bundle": "node tools/bundle.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.2"
   }
 }

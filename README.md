@@ -64,11 +64,18 @@ program its sixteen words as hex digits. Click a Hex input to count it on.
 Nothing opens until you are signed in (`js/auth.js`, `js/login.js`). Create an account the first time,
 sign in after that, and the session is remembered, so you can carry on building offline.
 
-- Accounts live **in this browser only** — there is no server. Passwords are kept as salted PBKDF2
-  hashes (the same scheme as the GameNest games project). The consequence: no password reset, and
-  accounts don't follow you to another device. A username is a nickname, not proof of who someone is.
-- Each account has its own builds. Builds made before accounts existed go to the first account created
-  on that device.
+- **On the website** accounts live on the server (`api/`, Vercel Functions). Passwords are kept as
+  salted scrypt hashes; the session is an HttpOnly cookie that lasts 30 days. Each account's builds are
+  stored in a **private Vercel Blob store**, so signing in on any device brings them back.
+- The browser keeps a working copy and sends it up about a second after each change. The avatar in the
+  header shows a grey dot while saving and an orange one when it can't reach the server (it retries,
+  and anything unsent stays in the browser). If two devices save at once, the server refuses the stale
+  one and the device merges the two libraries (newest copy of each build wins) before saving again.
+- Builds already made in this browser under a browser-only account of the same name — or before
+  accounts existed — are handed over to the server account the first time it signs in here.
+- **The one-file offline copy** (`file://`), or a static server with no `/api`, has no server to talk
+  to, so there accounts live in that browser only (salted PBKDF2), with no password reset.
+- There is no password reset yet. A username is a nickname, not proof of who someone is.
 - A new account opens straight onto an empty sheet; a returning one lands on its Home page.
 - The name in the header's top-right signs you out. Your sheet is kept first.
 
@@ -110,7 +117,7 @@ css/
   tablet.css          console along the bottom, touch sizes
 js/
   layout.js           picks the layout (runs first, in <head>)
-  auth.js             accounts: register, sign in, per-account storage keys
+  auth.js             accounts (server or browser-only), per-account storage, syncing builds up
   core.js             constants, the part catalogue, state, colours, geometry
   shapes.js           drawing gates, switches, buttons and lamps
   symbols.js          drawing components, chips and displays
@@ -132,7 +139,10 @@ js/
   offline.js          registers the service worker
 sw.js                 offline cache
 assets/               icon and fonts
+api/                  Vercel Functions: auth/{register,login,logout,me}, state (an account's builds)
+  _lib/               accounts, cookies and request helpers, the Blob (or local .data/) store
 tools/bundle.mjs      packs everything into one offline HTML file
+tools/dev-server.mjs  serves the site and the api/ routes together, for local use
 ```
 
 The scripts are plain classic scripts that share one scope, loaded in order — no build step.
@@ -140,15 +150,21 @@ The scripts are plain classic scripts that share one scope, loaded in order — 
 ## Run it
 
 ```sh
-npm run dev           # http://localhost:3000
+npm install
+npm run dev           # http://localhost:3000, with the /api routes
 ```
 
-Or open `index.html` straight from disk.
+Locally, with no Blob token set, accounts and builds are kept as files in `.data/` (git-ignored).
+Opening `index.html` straight from disk works too, with browser-only accounts.
 
 ## Deploy (Vercel)
 
-Import this repo in Vercel with the framework preset **Other** and no build command — it's a
-static site. Every push to `main` redeploys.
+Import this repo in Vercel with the framework preset **Other** and no build command. The pages
+are static; the `api/` folder is deployed as Node functions. Every push to `main` redeploys.
+
+Accounts need storage, once: in the Vercel project open **Storage → Create → Blob**, choose
+**Private** access, and connect it to the project (this sets `BLOB_READ_WRITE_TOKEN`). Then redeploy.
+Until a store is connected, creating an account shows a message saying so — nothing is silently lost.
 
 ## One-file offline copy
 

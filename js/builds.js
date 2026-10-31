@@ -59,7 +59,7 @@ var curT = 0;
 function saveCur(){
   clearTimeout(curT);
   curT = setTimeout(function(){
-    try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); } catch (err) {}
+    try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); Auth.changed(); } catch (err) {}
   }, 400);
 }
 function libRead(){
@@ -69,7 +69,7 @@ function libRead(){
   } catch (err) { return {}; }
 }
 function libWrite(o){
-  try { localStorage.setItem(LIBKEY(), JSON.stringify(o)); return true; }
+  try { localStorage.setItem(LIBKEY(), JSON.stringify(o)); Auth.changed(); return true; }
   catch (err) { return false; }
 }
 
@@ -136,7 +136,7 @@ function saveBuild(){
   if (!nodes.length){ flash("Nothing on the sheet to save yet."); return false; }
   if (testMode) setTest(false);
   ask({title:"Save build", ok:"Save", value:docName || suggestName(),
-    msg:"What should this build be called? It is kept on this device — rename, copy or delete it from Home.",
+    msg:"What should this build be called? " + (Auth.cloud() ? "It is saved to your account" : "It is kept on this device") + " — rename, copy or delete it from Home.",
     check:function(v){ return nameErr(v, docName); },
     done:saveAs});
   return true;

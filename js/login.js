@@ -12,7 +12,7 @@ function loginTab(m){
   $("#pw2Row").hidden = !up;
   $("#loginT").textContent = up ? "Create your account" : "Welcome back";
   $("#loginS").textContent = up
-    ? "Pick a username and password. Your builds are kept under it, and it is the name you carry into the Arena."
+    ? "Pick a username and password. Your builds are " + (Auth.cloud() ? "saved to it" : "kept under it") + ", and it is the name you carry into the Arena."
     : "Sign in to open your builds and your place in the Arena.";
   $("#loginGo").textContent = up ? "Create account" : "Sign in";
   $("#lpw").autocomplete = up ? "new-password" : "current-password";
@@ -21,7 +21,10 @@ function loginTab(m){
 /* Show the screen; done() runs once someone has signed in or made an account. */
 function loginShow(done){
   loginDone = done;
-  loginTab(Object.keys(Auth.users()).length ? "in" : "up");
+  loginTab(Auth.hasAccounts() ? "in" : "up");
+  $("#loginFine").textContent = Auth.cloud()
+    ? "Your account and builds are saved on the Logic Bench server, so you can sign in from any device. There is no password reset yet, so keep your password safe."
+    : "This copy is offline, so accounts are kept in this browser on this device only — nothing is sent to a server, and there is no password reset. Use the website to keep builds in an account you can open anywhere.";
   $("#lpw").value = $("#lpw2").value = "";
   $("#login").hidden = false;
   $("#luser").focus();
@@ -54,6 +57,8 @@ $("#loginForm").addEventListener("submit", function(e){
 $("#login").addEventListener("keydown", function(e){ e.stopPropagation(); });
 
 /* ---------- who is signed in ---------- */
+var SYNC_TEXT = {saved:"builds saved to your account", pending:"saving soon", saving:"saving…",
+  waiting:"not saved yet — no connection, it will retry", signedout:"signed out on the server — sign in again to save"};
 function userChip(){
   var u = Auth.current(), b = $("#btnUser");
   b.hidden = !u;
@@ -61,20 +66,24 @@ function userChip(){
   $("#userDot").textContent = u.name.charAt(0).toUpperCase();
   $("#userDot").style.background = "hsl(" + u.color + ",55%,42%)";
   $("#userName").textContent = u.name;
-  b.title = "Signed in as " + u.name + " · click to sign out";
+  b.dataset.sync = Auth.cloud() ? Auth.syncState() : "";
+  b.title = "Signed in as " + u.name + (Auth.cloud() ? " · " + SYNC_TEXT[Auth.syncState()] : "") + " · click to sign out";
   $("#homeWho").textContent = u.name;
 }
 /* The sheet is kept first, then the page starts over at the login screen. */
 function signOut(){
   if (testMode) setTest(false);
   keepBuild();
-  try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); } catch (err) {}
-  Auth.logout();
-  location.reload();
+  try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); Auth.changed(); } catch (err) {}
+  flash("Signing out…");
+  Auth.logout().then(function(){ location.reload(); });
 }
 $("#btnUser").addEventListener("click", function(){
   var u = Auth.current();
   if (!u) return;
-  ask({title:"Sign out", ok:"Sign out", msg:"Signed in as “" + u.name + "”. Your builds are kept on this device and are here when you sign in again.",
+  var where = !Auth.cloud() ? "Your builds are kept on this device and are here when you sign in again."
+    : Auth.syncState() === "waiting" ? "Some changes have not reached the server yet. They stay in this browser and are sent the next time you sign in here."
+    : "Your builds are saved to your account and are there when you sign in again, on this or any device.";
+  ask({title:"Sign out", ok:"Sign out", msg:"Signed in as “" + u.name + "”. " + where,
     done:signOut});
 });

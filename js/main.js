@@ -45,5 +45,9 @@ function boot(hot){
 if (window.claude && window.claude.hot && window.claude.hot.snapshot){
   window.claude.hot.snapshot(function(){ return {doc:snapshot(), dirty:docDirty}; });
 }
-if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(boot);
-else boot((window.claude && window.claude.hot && window.claude.hot.data) || null);
+/* builds merged in from another device show up on the home page straight away */
+Auth.onMerged(function(){ if (!$("#home").hidden && typeof renderHome === "function") renderHome(); });
+Auth.onSync(userChip);
+function start(hot){ Auth.init().then(function(){ boot(hot); }); }
+if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start);
+else start((window.claude && window.claude.hot && window.claude.hot.data) || null);

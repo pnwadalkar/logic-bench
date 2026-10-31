@@ -3,7 +3,7 @@
    reaches the device on the next visit. Bump VERSION when files are added or removed. */
 "use strict";
 
-var VERSION = "logic-bench-v3";
+var VERSION = "logic-bench-v4";
 var FILES = [
   "./",
   "index.html",
@@ -52,7 +52,9 @@ self.addEventListener("activate", function(e){
 
 self.addEventListener("fetch", function(e){
   var req = e.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  var url = new URL(req.url);
+  /* accounts and saved builds always come from the server, never from the cache */
+  if (req.method !== "GET" || url.origin !== location.origin || url.pathname.indexOf("/api/") === 0) return;
   e.respondWith(caches.open(VERSION).then(function(c){
     return c.match(req, {ignoreSearch:true}).then(function(hit){
       var net = fetch(req).then(function(res){
