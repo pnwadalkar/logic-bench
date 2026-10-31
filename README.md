@@ -2,7 +2,8 @@
 
 Build and test circuits in the browser, from single transistors up to the parts a computer is
 built from — gates, adders, an ALU, decoders, flip-flops, registers, counters, RAM and ROM — wired
-up on an endless sheet. No install, no account, and it keeps working offline.
+up on an endless sheet. No install, and it keeps working offline. You sign in once with a username and
+password, build, and then send your builds into the **Arena** to see how they rank.
 
 ## One app, two layouts
 
@@ -58,6 +59,46 @@ program its sixteen words as hex digits. Click a Hex input to count it on.
 - Back up all builds to one JSON file and restore them on another device
 - Light and dark themes; installable as an app, and works offline after the first visit
 
+## Accounts
+
+Nothing opens until you are signed in (`js/auth.js`, `js/login.js`). Create an account the first time,
+sign in after that, and the session is remembered, so you can carry on building offline.
+
+- Accounts live **in this browser only** — there is no server. Passwords are kept as salted PBKDF2
+  hashes (the same scheme as the GameNest games project). The consequence: no password reset, and
+  accounts don't follow you to another device. A username is a nickname, not proof of who someone is.
+- Each account has its own builds. Builds made before accounts existed go to the first account created
+  on that device.
+- A new account opens straight onto an empty sheet; a returning one lands on its Home page.
+- The name in the header's top-right signs you out. Your sheet is kept first.
+
+## Arena
+
+Open **Arena** from the header or Home. Each challenge is a small circuit with a known right answer
+(half adder, 2:1 multiplexer, majority vote, binary to Gray code, 2-to-4 decoder, full adder, 2-bit
+comparator, 2-bit adder). Build it on the sheet, name your switches and lamps as the brief says (or keep
+them in that order, top to bottom), and **Check** or **Submit** it.
+
+The checker (`js/checker.js`) runs the build on its own, apart from the sheet:
+
+1. **Rules** — gates and electronic parts only, or chips too (minus the ones that would just be the
+   answer). No clocks, memory, capacitors or inductors, no feedback loops, no spare switches (they'd be a
+   free constant) and no open input pins (they'd be a free 0).
+2. **Does it work** — every input pattern is tried. One wrong and it isn't entered.
+3. **Size** — transistors: a NAND is 4, a NOT 2, an XOR 8, a full-adder chip 28, and so on.
+4. **Speed** — the longest run of gate delays from any switch to a lamp.
+5. **Wiring** — the number of wires.
+
+Score = transistors + 4 × gate delays + ½ × wires, lower is better. Points are `1000 × benchmark / score`,
+so 1000 matches the best reference build and a leaner one earns more. Each player keeps their best build
+per challenge; a tie goes to whoever got there first. The Rankings tab adds up everyone's points.
+Each leaderboard starts with three reference builds by bot players (Ada, Boole and Hopper).
+
+The Arena is shared by every account **on this device**. To compete across devices, **Share my entries**
+downloads your entries as a file and **Import entries** on the other device merges them in. Every
+imported build is run through the checker again, so a score in a file can't be forged, and a build that
+no longer passes is dropped. Entries are also re-checked each time a board is drawn.
+
 ## Project layout
 
 ```
@@ -69,6 +110,7 @@ css/
   tablet.css          console along the bottom, touch sizes
 js/
   layout.js           picks the layout (runs first, in <head>)
+  auth.js             accounts: register, sign in, per-account storage keys
   core.js             constants, the part catalogue, state, colours, geometry
   shapes.js           drawing gates, switches, buttons and lamps
   symbols.js          drawing components, chips and displays
@@ -82,6 +124,9 @@ js/
   timing.js           clocks, capacitors and inductors over time
   api.js              window.bench console API
   home.js             home page, backup and restore
+  login.js            the login screen, the header account chip, sign out
+  checker.js          the Arena checker: rules, every input pattern, size, speed, wiring
+  arena.js            challenges, reference builds, standings, import/export, the Arena screens
   fullscreen.js       full screen + landscape lock
   main.js             boot
   offline.js          registers the service worker

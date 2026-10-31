@@ -20,10 +20,12 @@ function snapshot(){
     seq:seq, pan:{x:pan.x, y:pan.y}, zoom:zoom
   };
 }
-function load(d){
-  if (!d || !d.nodes || !d.nodes.length) return false;
-  var ids = {};
-  nodes = d.nodes.filter(function(n){ return n && n.id && TYPES[n.t]; }).map(function(n){
+/* The parts and wires a build holds, as live objects — anything that does not
+   belong on a sheet is dropped. load() puts them on the sheet; the arena's
+   checker runs them where they are. */
+function graphOf(d){
+  var ids = {}, ns, ws;
+  ns = d.nodes.filter(function(n){ return n && n.id && TYPES[n.t]; }).map(function(n){
     ids[n.id] = nOut({t:n.t});
     var o = {id:n.id, t:n.t, x:+n.x || 0, y:+n.y || 0, v:0, s:(n.s | 0) & 15, l:n.l || "", iv:[]};
     if (typeof n.c === "number" && isFinite(n.c)) o.c = n.c;
@@ -31,13 +33,19 @@ function load(d){
     return o;
   });
   var pt = function(o){ return o && typeof o.x === "number" ? {x:+o.x, y:+o.y} : null; };
-  wires = (d.wires || []).filter(function(w){
+  ws = (d.wires || []).filter(function(w){
     if (!w) return false;
     return !!((w.a ? ids[w.a] > (w.q | 0) : pt(w.fa)) && (w.b ? ids[w.b] !== undefined : pt(w.fb)));
   }).map(function(w, i){
     return {id:w.id || ("w" + (i + 1) + "r"), a:w.a || null, q:w.a ? w.q | 0 : 0, b:w.b || null, p:w.p | 0,
       fa:w.a ? null : pt(w.fa), fb:w.b ? null : pt(w.fb)};
   });
+  return {nodes:ns, wires:ws};
+}
+function load(d){
+  if (!d || !d.nodes || !d.nodes.length) return false;
+  var g = graphOf(d);
+  nodes = g.nodes; wires = g.wires;
   seq = d.seq || nodes.length + wires.length + 2;
   pan = d.pan && typeof d.pan.x === "number" ? {x:d.pan.x, y:d.pan.y} : {x:0, y:0};
   zoom = typeof d.zoom === "number" ? clampZ(d.zoom) : ZDEF;
@@ -51,17 +59,17 @@ var curT = 0;
 function saveCur(){
   clearTimeout(curT);
   curT = setTimeout(function(){
-    try { localStorage.setItem(CURKEY, JSON.stringify({doc:snapshot(), dirty:docDirty})); } catch (err) {}
+    try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); } catch (err) {}
   }, 400);
 }
 function libRead(){
   try {
-    var o = JSON.parse(localStorage.getItem(LIBKEY) || "{}");
+    var o = JSON.parse(localStorage.getItem(LIBKEY()) || "{}");
     return (o && typeof o === "object") ? o : {};
   } catch (err) { return {}; }
 }
 function libWrite(o){
-  try { localStorage.setItem(LIBKEY, JSON.stringify(o)); return true; }
+  try { localStorage.setItem(LIBKEY(), JSON.stringify(o)); return true; }
   catch (err) { return false; }
 }
 
@@ -213,7 +221,7 @@ function when(ts){
 /* A short confirmation over the sheet. */
 var flashT = 0;
 function flash(msg){
-  var el = $("#toast"), host = $("#home").hidden ? $("#stage") : document.body;
+  var el = $("#toast"), host = document.querySelector("#home:not([hidden]), #arena:not([hidden])") ? document.body : $("#stage");
   if (el.parentNode !== host) host.appendChild(el);
   el.textContent = msg;
   el.classList.add("show");

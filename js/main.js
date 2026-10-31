@@ -1,4 +1,4 @@
-/* Boot: size the sheet, follow the theme, and open the last sheet or the example. */
+/* Boot: size the sheet, follow the theme, sign in, and open the last sheet. */
 "use strict";
 
 /* ---------- boot ---------- */
@@ -17,10 +17,19 @@ new MutationObserver(function(){ readColors(); draw(); })
 
 function boot(hot){
   var ok = false, cur = null;
+  /* nothing opens until someone is signed in; the login screen calls boot again */
+  if (!Auth.current()){ loginShow(function(){ boot(null); }); return; }
+  userChip();
   if (hot && hot.doc && load(hot.doc)){ docName = hot.doc.name || ""; docDirty = !!hot.dirty; ok = true; }
   if (!ok){
-    try { cur = JSON.parse(localStorage.getItem(CURKEY) || "null"); } catch (err) { cur = null; }
+    try { cur = JSON.parse(localStorage.getItem(CURKEY()) || "null"); } catch (err) { cur = null; }
     if (cur && cur.doc && load(cur.doc)){ docName = cur.doc.name || ""; docDirty = !!cur.dirty; ok = true; }
+  }
+  if (!ok && !Object.keys(libRead()).length){
+    /* a new account has nothing yet: straight onto a bare sheet, ready to build */
+    newSheet(); enterBench();
+    flash("Welcome, " + Auth.current().name + " · drag a part in from the rail");
+    return;
   }
   if (!ok) example();
   else {

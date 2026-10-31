@@ -166,7 +166,9 @@ function settle(src){
     if (!changed) break;
   }
 }
-function evaluate(){
+/* Settle the sheet and return how many inputs are left open. The screen is not
+   touched, so the arena's checker can run a circuit that is not on the sheet. */
+function solve(){
   var src = new Map(), i, j, n, w, s, round, fire, next, t, c;
   for (i = 0; i < wires.length; i++){
     w = wires[i];
@@ -208,6 +210,10 @@ function evaluate(){
     for (j = 0; j < nIn(nodes[i]); j++)
       if (src.get(nodes[i].id + ":" + j) === undefined && !(t.pd && t.pd[j] !== undefined)) open++;
   }
+  return open;
+}
+function evaluate(){
+  var open = solve();
   $("#count").textContent = nodes.length + " parts · " + wires.length + " wires" +
     (open ? " · " + open + " open input" + (open > 1 ? "s" : "") : "") +
     (picked() ? " · " + picked() + " selected" : "");

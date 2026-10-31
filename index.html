@@ -32,6 +32,7 @@
       <span class="spacer"></span>
       <span id="count"></span>
       <button id="btnFull" type="button" title="Full screen, turned sideways">Full screen</button>
+      <button id="btnArena" type="button" title="Send a build in against a challenge and see where it ranks">Arena</button>
       <button id="btnHome" type="button" title="All your builds, as cards to pick from">Home</button>
       <button id="btnSave" type="button" title="Name this build and save it (Ctrl+S)">Save</button>
       <button id="btnNew" type="button" title="Start a fresh sheet — the one you are on is kept">New</button>
@@ -39,6 +40,7 @@
       <button id="btnClean" type="button" title="Cleaner looks: lay the circuit out in columns, keep the inputs in the order you drew them, gather the lamps in one column down the right-hand edge, straighten every wire, square the corners and squeeze out the dead space (C)">Cleaner</button>
       <button id="btnDel" type="button">Delete</button>
       <button id="btnTest" type="button" title="Lock the sheet and drive it with the switches (T)">Test</button>
+      <button id="btnUser" class="user" type="button" hidden><i id="userDot" aria-hidden="true"></i><span id="userName"></span></button>
     </div>
   </header>
   <div id="main">
@@ -76,10 +78,11 @@
   <div class="wrap">
     <div class="homeTop">
       <h1>Logic <em>Bench</em></h1>
-      <p>Pick a build to work on.</p>
+      <p>Signed in as <b id="homeWho"></b> · pick a build to work on.</p>
     </div>
     <div class="homeAct">
       <button id="hNew" class="key" type="button">New build</button>
+      <button id="hArena" type="button" title="Challenges, rankings and the checker">Arena</button>
       <button id="hEg" type="button">Half adder example</button>
       <button id="hEg2" type="button" title="A clock driving a counter, read out on a hex display">Counter example</button>
       <button id="hSave" type="button" title="Download every build as one file, to keep safe or carry to another device">Back up all</button>
@@ -94,6 +97,54 @@
   </div>
 </div>
 
+<div id="arena" hidden>
+  <div class="wrap">
+    <div class="homeTop">
+      <h1>Logic <em>Arena</em></h1>
+      <p>Playing as <b id="arenaWho"></b> · <span id="aRate"></span></p>
+    </div>
+    <div class="homeAct">
+      <button id="aBack" class="key" type="button">Back</button>
+      <button id="aTabC" class="tab on" type="button">Challenges</button>
+      <button id="aTabR" class="tab" type="button">Rankings</button>
+      <span class="spacer"></span>
+      <button id="aExp" type="button" title="Download your entries as one file to hand to someone on another device">Share my entries</button>
+      <button id="aImp" type="button" title="Bring in someone else's entries. Each one is run through the checker again">Import entries</button>
+      <input id="aFile" type="file" accept=".json,application/json" hidden>
+    </div>
+    <div id="aBody"></div>
+  </div>
+</div>
+
+<div id="login" hidden>
+  <main class="loginCard">
+    <h1>Logic <em>Bench</em></h1>
+    <h2 id="loginT">Welcome back</h2>
+    <p id="loginS" class="sub"></p>
+    <div class="tabs" role="tablist">
+      <button class="tab on" id="tabIn" type="button" role="tab" aria-selected="true">Sign in</button>
+      <button class="tab" id="tabUp" type="button" role="tab" aria-selected="false">Create account</button>
+    </div>
+    <form id="loginForm" novalidate autocomplete="on">
+      <label class="field"><span>Username</span>
+        <input id="luser" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" required>
+      </label>
+      <label class="field"><span>Password</span>
+        <span class="pw">
+          <input id="lpw" name="password" type="password" autocomplete="current-password" minlength="6" required>
+          <button type="button" id="leye" aria-label="Show password">Show</button>
+        </span>
+      </label>
+      <label class="field" id="pw2Row" hidden><span>Confirm password</span>
+        <input id="lpw2" type="password" autocomplete="new-password" minlength="6">
+      </label>
+      <p id="loginErr" role="alert"></p>
+      <button class="key wide" id="loginGo" type="submit">Sign in</button>
+    </form>
+    <p class="fine">Accounts are kept in this browser on this device only — nothing is sent to a server, so there is no password reset. A username is a nickname, not proof of who someone is.</p>
+  </main>
+</div>
+
 <div id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgT">
   <form id="dlgBox" autocomplete="off">
     <p id="dlgT"></p>
@@ -105,6 +156,7 @@
 </div>
 
 <!-- classic scripts sharing one scope, in dependency order; main.js boots the bench -->
+<script src="js/auth.js"></script>
 <script src="js/core.js"></script>
 <script src="js/shapes.js"></script>
 <script src="js/symbols.js"></script>
@@ -118,6 +170,9 @@
 <script src="js/timing.js"></script>
 <script src="js/api.js"></script>
 <script src="js/home.js"></script>
+<script src="js/login.js"></script>
+<script src="js/checker.js"></script>
+<script src="js/arena.js"></script>
 <script src="js/fullscreen.js"></script>
 <script src="js/main.js"></script>
 <script src="js/offline.js"></script>

@@ -318,6 +318,7 @@ window.addEventListener("keydown", function(e){
     if (e.key === "Escape" && nodes.length) enterBench();
     return;
   }
+  if (document.querySelector("#arena:not([hidden]), #login:not([hidden])")) return;
   if (play) playEnd();
   if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")){
     e.preventDefault(); saveBuild(); return;

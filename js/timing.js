@@ -12,7 +12,7 @@ var CATCH = 0.14;                    /* how far an inductor's current gets towar
 function rate(n){ return typeof n.c === "number" ? n.c : 1; }
 function rateText(r){ return r === 0 ? "stop" : r === 0.5 ? "½ Hz" : r + " Hz"; }
 function tick(){
-  if (play || document.hidden || !$("#home").hidden) return;
+  if (play || document.hidden || document.querySelector("#home:not([hidden]), #arena:not([hidden]), #login:not([hidden])")) return;
   tickNow();
 }
 function tickNow(){

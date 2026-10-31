@@ -30,3 +30,5 @@
   [data-layout="desktop"] .part span{display:none}
   [data-layout="desktop"] .part{padding:5px}
 }
+/* a narrow window keeps the header to one row: the account chip shrinks to its avatar */
+@media (max-width:1100px){[data-layout="desktop"] button.user span{display:none}[data-layout="desktop"] button.user{padding-inline:6px}}

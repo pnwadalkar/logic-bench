@@ -4,7 +4,9 @@
 var $ = function(s){ return document.querySelector(s); };
 var cv = $("#cv"), ctx = cv.getContext("2d"), ren = $("#ren");
 var STUB = 9, GRID = 24, SNAP = 12, PORT = 12, PTR = 5, MONO = '500 10px "IBM Plex Mono", monospace';
-var LIBKEY = "logicbench.lib", CURKEY = "logicbench.cur";
+/* each account keeps its own builds: js/auth.js gives the keys their owner's name */
+function LIBKEY(){ return Auth.key("lib"); }
+function CURKEY(){ return Auth.key("cur"); }
 
 var TYPES = {
   /* A junction: both of its ports sit on the same dot, so wires meet it from
