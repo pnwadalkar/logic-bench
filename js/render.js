@@ -110,6 +110,7 @@ function render(){
     ctx.strokeRect(at.x - 6.5, at.y - 6.5, clip.w + 13, clip.h + 13);
     ctx.setLineDash([]);
   }
+  Collab.drawPeers(ctx);
   pickBar();
 }
 function sizeCanvas(){

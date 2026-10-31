@@ -73,8 +73,11 @@ function userChip(){
 /* The sheet is kept first, then the page starts over at the login screen. */
 function signOut(){
   if (testMode) setTest(false);
-  keepBuild();
-  try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); Auth.changed(); } catch (err) {}
+  if (Collab.active()) Collab.stop();
+  else {
+    keepBuild();
+    try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); Auth.changed(); } catch (err) {}
+  }
   flash("Signing out…");
   Auth.logout().then(function(){ location.reload(); });
 }

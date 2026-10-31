@@ -8,6 +8,7 @@
     "bundle": "node tools/bundle.mjs"
   },
   "dependencies": {
+    "@upstash/redis": "^1.40.0",
     "@vercel/blob": "^2.8.2"
   }
 }

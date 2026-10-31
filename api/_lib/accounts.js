@@ -115,17 +115,28 @@ async function login(name, password, ip) {
   return { user: publicUser(row), token: await openSession(row) };
 }
 
+/* A shared project asks who is calling about once a second, so a session that was
+   just looked up is remembered for a few seconds by this running instance. */
+const recent = new Map();
+const RECENT_MS = 20000;
+
 async function userForToken(token) {
   if (!/^[a-f0-9]{64}$/.test(token || "")) return null;
+  const hit = recent.get(token);
+  if (hit && hit.until > Date.now()) return hit.user;
   const row = await guard(function () { return store.readJson(sessionKey(token)); });
   if (!row || !row.user || row.exp < Date.now()) {
+    recent.delete(token);
     if (row) await store.remove(sessionKey(token));
     return null;
   }
+  if (recent.size > 2000) recent.clear();
+  recent.set(token, { user: row.user, until: Date.now() + RECENT_MS });
   return row.user;
 }
 
 async function logout(token) {
+  recent.delete(token);
   if (/^[a-f0-9]{64}$/.test(token || "")) await store.remove(sessionKey(token));
 }
 

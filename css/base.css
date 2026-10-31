@@ -107,6 +107,37 @@ button.danger:hover{border-color:var(--hot);color:var(--hot)}
 .card .acts button{flex:1 1 0;padding:9px 4px;font-size:10px}
 #homeNote{font:400 11px/1.5 var(--sans);color:var(--muted);margin:24px 0 0}
 
+/* shared projects on the home page */
+#shBox{margin-bottom:30px}
+#shBox .homeAct{margin-bottom:14px}
+#shared{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+#shared[data-empty="none"]::after{content:"No shared projects yet — start one, or join with a code someone sent you.";
+  display:block;padding:4px 2px;font:400 12px/1.5 var(--sans);color:var(--muted)}
+#shared[data-empty="loading"]::after{content:"Looking for your shared projects…";
+  display:block;padding:4px 2px;font:400 12px/1.5 var(--sans);color:var(--muted)}
+#shNote{font:400 11px/1.5 var(--sans);color:var(--muted);margin:12px 0 0}
+#shNote:empty{display:none}
+.card.shared .ppl{display:flex;padding:12px 11px 2px;min-height:26px}
+form.join{display:inline-flex;gap:0}
+form.join input{width:14ch;font:500 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:8px 10px;
+  border:1px solid var(--line);border-right:0;border-radius:6px 0 0 6px;background:var(--canvas);color:var(--fg);min-width:0}
+form.join input:focus{outline:none;border-color:var(--accent)}
+form.join button{border-radius:0 6px 6px 0}
+
+/* avatars: a row of initials that overlap a little */
+.ppl{display:inline-flex;align-items:center}
+.ppl i{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font:600 10px/1 var(--mono);
+  font-style:normal;color:#fff;box-shadow:0 0 0 2px var(--panel)}
+.ppl i+i{margin-left:-5px}
+.ppl i.more{background:var(--grid);color:var(--fg)}
+
+/* the top bar while a shared project is open */
+#crew{flex:none;display:inline-flex;align-items:center;gap:8px;margin-left:6px}
+#crew .live{width:8px;height:8px;border-radius:50%;background:#2fa36b;box-shadow:0 0 0 3px color-mix(in srgb,#2fa36b 25%,transparent)}
+#crew .live.offline{background:var(--hot);box-shadow:0 0 0 3px color-mix(in srgb,var(--hot) 25%,transparent)}
+#crew .ppl i{width:20px;height:20px;font-size:9px}
+@media (max-width:700px){#crew .ppl{display:none}}
+
 /* the picker: a bar that rides over the boxed-in area, so copy and paste are
    there to be clicked and not only typed */
 #pick{position:absolute;z-index:6;transform:translate(-50%,-100%);

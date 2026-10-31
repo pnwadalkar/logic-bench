@@ -28,6 +28,11 @@
       <input id="docname" maxlength="40" spellcheck="false" placeholder="Untitled"
         aria-label="Build name" title="The build's name — type over it to rename">
       <span id="dot" aria-hidden="true" title="Unsaved changes">•</span>
+      <span id="crew" hidden>
+        <span id="crewLive" class="live" title="Shared project"></span>
+        <span id="crewPpl" aria-label="Who is here"></span>
+        <button id="btnInvite" type="button" title="Invite people to build on this sheet with you">Invite</button>
+      </span>
       <span id="tip">Drag the bare sheet to move it — a circuit can run far past the window · click a port, then click anywhere to drop the wire · Region (R) or Shift-drag boxes in an area to copy, Paste (P) drops it where you click · Cleaner (C) squares it all up</span>
       <span class="spacer"></span>
       <span id="count"></span>
@@ -90,6 +95,19 @@
       <input id="hFile" type="file" accept=".json,application/json" hidden>
       <span class="spacer"></span>
       <button id="hBack" type="button" hidden>Back to the sheet</button>
+    </div>
+    <div id="shBox">
+      <p class="sect">Shared projects · build one circuit together, live</p>
+      <div class="homeAct">
+        <button id="shNew" type="button" title="Start an empty sheet that others can join and build on with you">New shared project</button>
+        <button id="shFrom" type="button" title="Turn the sheet you have open into a shared project">Share the sheet I'm on</button>
+        <form id="shJoin" class="join" autocomplete="off">
+          <input id="shCode" maxlength="8" spellcheck="false" autocapitalize="characters" placeholder="Invite code" aria-label="Invite code">
+          <button type="submit">Join</button>
+        </form>
+      </div>
+      <div id="shared"></div>
+      <p id="shNote" class="note"></p>
     </div>
     <p class="sect">Your builds</p>
     <div id="cards"></div>
@@ -158,6 +176,7 @@
 <!-- classic scripts sharing one scope, in dependency order; main.js boots the bench -->
 <script src="js/auth.js"></script>
 <script src="js/core.js"></script>
+<script src="js/collab.js"></script>
 <script src="js/shapes.js"></script>
 <script src="js/symbols.js"></script>
 <script src="js/sim.js"></script>

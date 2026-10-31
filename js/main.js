@@ -29,6 +29,7 @@ function boot(hot){
     /* a new account has nothing yet: straight onto a bare sheet, ready to build */
     newSheet(); enterBench();
     flash("Welcome, " + Auth.current().name + " · drag a part in from the rail");
+    sharedOnBoot();
     return;
   }
   if (!ok) example();
@@ -41,6 +42,24 @@ function boot(hot){
      it, so the first card and "Back to the sheet" are the same thing. A hot
      reload goes straight to the sheet instead, so the edit loop is unbroken. */
   if (hot && hot.doc) enterBench(); else homeShow();
+  sharedOnBoot();
+}
+/* An invite link (?join=CODE) joins straight in; otherwise a shared project that
+   was open when the page was last left opens again. */
+function sharedOnBoot(){
+  var code = null, last = null;
+  if (!Auth.cloud()) return;
+  try { code = new URLSearchParams(location.search).get("join"); } catch (err) {}
+  try { last = localStorage.getItem(Auth.key("project")); } catch (err) {}
+  if (code){
+    try { history.replaceState(null, "", location.pathname); } catch (err) {}
+    Collab.join(code).then(function(p){ enterBench(); flash("Joined “" + p.name + "” · you can build on it together now"); },
+      function(e){ flash(e.message); });
+  } else if (last){
+    Collab.open(last).then(function(){ enterBench(); }, function(){
+      try { localStorage.removeItem(Auth.key("project")); } catch (err) {}
+    });
+  }
 }
 if (window.claude && window.claude.hot && window.claude.hot.snapshot){
   window.claude.hot.snapshot(function(){ return {doc:snapshot(), dirty:docDirty}; });

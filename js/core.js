@@ -7,6 +7,14 @@ var STUB = 9, GRID = 24, SNAP = 12, PORT = 12, PTR = 5, MONO = '500 10px "IBM Pl
 /* each account keeps its own builds: js/auth.js gives the keys their owner's name */
 function LIBKEY(){ return Auth.key("lib"); }
 function CURKEY(){ return Auth.key("cur"); }
+/* A new part or wire's id. In a shared project every device tags its ids with its
+   own mark (IDTAG, set by js/collab.js), so two people can never mint the same one. */
+var IDTAG = "";
+function newId(p){
+  var id, taken = function(x){ for (var i = 0; i < wires.length; i++) if (wires[i].id === x) return true; return false; };
+  do { id = p + (seq++) + IDTAG; } while (byId.has(id) || (p === "w" && taken(id)));
+  return id;
+}
 
 var TYPES = {
   /* A junction: both of its ports sit on the same dot, so wires meet it from

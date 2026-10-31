@@ -15,7 +15,7 @@ function autoLabel(t){
   return "";
 }
 function addNode(t, x, y){
-  var n = {id:"n" + (seq++), t:t, x:x, y:y, v:0, s:0, l:autoLabel(t), iv:[]};
+  var n = {id:newId("n"), t:t, x:x, y:y, v:0, s:0, l:autoLabel(t), iv:[]};
   nodes.push(n); reindex();
   return n;
 }
@@ -41,13 +41,13 @@ function connect(a, b){
   /* already wired exactly this way: no second line on top of the first */
   if (wires.some(function(w){ return w.a === o.id && (w.q | 0) === (o.p | 0) && w.b === i.id && w.p === i.p; })) return false;
   takeInput(i, null);
-  wires.push({id:"w" + (seq++), a:o.id, q:o.p | 0, b:i.id, p:i.p});
+  wires.push({id:newId("w"), a:o.id, q:o.p | 0, b:i.id, p:i.p});
   return true;
 }
 /* Drop the far end of a wire on bare sheet. The wire is real and editable;
    it simply carries nothing until the loose end lands on a port. */
 function loose(ph, p){
-  var w = {id:"w" + (seq++), a:null, q:0, b:null, p:0, fa:null, fb:null};
+  var w = {id:newId("w"), a:null, q:0, b:null, p:0, fa:null, fb:null};
   var q = {x:Math.round(p.x / SNAP) * SNAP, y:Math.round(p.y / SNAP) * SNAP};
   if (ph.kind === "out"){ w.a = ph.id; w.q = ph.p | 0; w.fb = q; }
   else {
@@ -101,7 +101,9 @@ function commit(){ docDirty = true; evaluate(); draw(); saveCur(); }
 /* One stack for everything that moves a lot at once — the cleaner, a paste, a
    region delete — so none of those is a one-way door. */
 function pushUndo(){
-  undoStack.push(snapshot());
+  var d = snapshot();
+  d.rc = Collab.clock();          /* in a shared project: how far others had got at this point */
+  undoStack.push(d);
   if (undoStack.length > 30) undoStack.shift();
 }
 function restore(d){
@@ -116,7 +118,8 @@ function restore(d){
 function undo(){
   if (testMode) return;
   if (!undoStack.length){ flash("Nothing to undo."); return; }
-  if (!restore(undoStack.pop())) return;
+  var d = undoStack.pop();
+  if (!restore(Collab.active() ? Collab.mergeUndo(d) : d)) return;
   commit();
   flash("Undone.");
 }
@@ -209,7 +212,7 @@ function pasteClip(where){
   for (i = 0; i < made.length; i++) pickN.add(made[i].id);
   for (i = 0; i < clip.wires.length; i++){
     cw = clip.wires[i];
-    w = {id:"w" + (seq++), p:cw.p, q:cw.q | 0,
+    w = {id:newId("w"), p:cw.p, q:cw.q | 0,
       a:cw.a === null ? null : made[cw.a].id,
       b:cw.b === null ? null : made[cw.b].id,
       fa:cw.fa ? {x:at.x + cw.fa.x, y:at.y + cw.fa.y} : null,

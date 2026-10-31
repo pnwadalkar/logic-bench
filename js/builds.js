@@ -58,6 +58,7 @@ function load(d){
 var curT = 0;
 function saveCur(){
   clearTimeout(curT);
+  if (Collab.active()) return;          /* a shared sheet keeps itself, on the server */
   curT = setTimeout(function(){
     try { localStorage.setItem(CURKEY(), JSON.stringify({doc:snapshot(), dirty:docDirty})); Auth.changed(); } catch (err) {}
   }, 400);
@@ -135,6 +136,17 @@ function store(){
 function saveBuild(){
   if (!nodes.length){ flash("Nothing on the sheet to save yet."); return false; }
   if (testMode) setTest(false);
+  if (Collab.active()){
+    ask({title:"Save a copy", ok:"Save copy", value:freeName(docName || "Shared build"),
+      msg:"A shared project saves itself for everyone as you work. This keeps a copy of it as it is now among your own builds.",
+      check:function(v){ return nameErr(v, null); },
+      done:function(v){
+        var lib = libRead(), d = snapshot();
+        delete d.rc; d.name = v; d.at = Date.now(); lib[v] = d;
+        if (libWrite(lib)) flash("Saved a copy as \u201c" + v + "\u201d"); else flash("This browser refused to store the build.");
+      }});
+    return true;
+  }
   ask({title:"Save build", ok:"Save", value:docName || suggestName(),
     msg:"What should this build be called? " + (Auth.cloud() ? "It is saved to your account" : "It is kept on this device") + " — rename, copy or delete it from Home.",
     check:function(v){ return nameErr(v, docName); },
@@ -155,13 +167,18 @@ function saveAs(name){
 /* Stepping off the sheet keeps it too, so nothing is dropped on the way to the
    home page or into another build. */
 function keepBuild(){
-  if (!docDirty || !nodes.length) return;
+  if (Collab.active() || !docDirty || !nodes.length) return;
   if (!docName) docName = suggestName();
   if (store()){ docDirty = false; nameChip(); }
 }
 function renameBuild(next){
   next = (next || "").trim().slice(0, 40);
   if (!next || next === docName){ nameChip(); return; }
+  if (Collab.active()){
+    Collab.rename(next).then(function(){ flash("Renamed the shared project to \u201c" + next + "\u201d"); },
+      function(e){ nameChip(); flash(e.message); });
+    return;
+  }
   var lib = libRead(), was = docName;
   if (lib[next]){ flash("“" + next + "” is taken."); nameChip(); return; }
   if (lib[was]){ lib[was].name = next; lib[next] = lib[was]; delete lib[was]; libWrite(lib); }
@@ -251,8 +268,16 @@ $("#btnNew").addEventListener("click", function(){
 
 /* ---------- seed ---------- */
 /* Half adder: two switches into XOR (sum) and AND (carry). */
+/* Leaving a shared project for a sheet of your own: what is unsent goes first.
+   Returns true if a shared project was open. */
+function leaveShared(){
+  if (!Collab.active()){ keepBuild(); return false; }
+  Collab.stop();
+  flash("Left the shared project \u00b7 it is on Home");
+  return true;
+}
 function example(){
-  keepBuild();
+  leaveShared();
   nodes = []; wires = []; seq = 1; pan = {x:0, y:0}; zoom = ZDEF; zoomShow(); clearPick(); pend = null; cascade = 0;
   var a = addNode("SWITCH", 72, 96), b = addNode("SWITCH", 72, 204);
   var x = addNode("XOR", 228, 96), n = addNode("AND", 228, 204);
@@ -270,7 +295,7 @@ function example(){
 /* Counter: a clock stepping a 4-bit counter, read out on a hex display, with the
    carry lit at F — the program counter of a CPU, ticking. */
 function example2(){
-  keepBuild();
+  leaveShared();
   nodes = []; wires = []; seq = 1; pan = {x:0, y:0}; zoom = ZDEF; zoomShow(); clearPick(); pend = null; cascade = 0;
   var k = addNode("CLOCK", 60, 168), c = addNode("CNT4", 168, 84);
   var d = addNode("HEXD", 324, 120), co = addNode("LAMP", 336, 228), i;

@@ -3,7 +3,7 @@
    reaches the device on the next visit. Bump VERSION when files are added or removed. */
 "use strict";
 
-var VERSION = "logic-bench-v4";
+var VERSION = "logic-bench-v5";
 var FILES = [
   "./",
   "index.html",
@@ -20,6 +20,7 @@ var FILES = [
   "js/layout.js",
   "js/auth.js",
   "js/core.js",
+  "js/collab.js",
   "js/shapes.js",
   "js/symbols.js",
   "js/sim.js",

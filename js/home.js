@@ -83,20 +83,25 @@ function card(name, d, live){
 function renderHome(){
   var host = $("#cards"), lib = libRead(), names = Object.keys(lib), made = [], i, c;
   host.textContent = "";
-  if (nodes.length){
+  if (nodes.length && !Collab.active()){
     c = card(docName || "Untitled sheet", snapshot(), true);
     made.push(c); host.appendChild(c.el);
   }
   names.sort(function(a, b){ return (lib[b].at || 0) - (lib[a].at || 0); });
   for (i = 0; i < names.length; i++){
     /* the open sheet is already the first card — it is not listed twice */
-    if (nodes.length && names[i] === docName) continue;
+    if (nodes.length && !Collab.active() && names[i] === docName) continue;
     c = card(names[i], lib[names[i]], false);
     made.push(c); host.appendChild(c.el);
   }
   /* the pictures last, once the cards have their width */
   for (i = 0; i < made.length; i++) thumb(made[i].pic, made[i].doc);
-  $("#hBack").hidden = !nodes.length;
+  $("#hBack").hidden = !nodes.length && !Collab.active();
+  $("#homeNote").textContent = (Auth.cloud()
+    ? "Your builds are saved to your account, so they are here on any device you sign in on."
+    : "Your builds are kept on this device and need no internet.") +
+    " Save asks for a name · tap a card to open it · Back up all downloads every build as one file you can Restore here or on another device.";
+  renderShared();
 }
 function homeShow(){
   ren.hidden = true;
@@ -104,6 +109,7 @@ function homeShow(){
   keepBuild();
   renderHome();
   $("#home").hidden = false;
+  loadShared();
 }
 function enterBench(){
   $("#home").hidden = true;
@@ -113,7 +119,7 @@ function openBuild(name){
   var d = libRead()[name];
   if (!d){ flash("No build called “" + name + "”."); return; }
   if (testMode) setTest(false);
-  keepBuild();
+  leaveShared();
   if (!load(d)){ flash("That build has no parts in it."); return; }
   docName = name; docDirty = false;
   nameChip(); evaluate(); draw(); saveCur(); enterBench();
@@ -123,8 +129,7 @@ function openBuild(name){
    never costs anything. */
 function newSheet(){
   if (testMode) setTest(false);
-  keepBuild();
-  pushUndo();
+  if (!leaveShared()) pushUndo();
   nodes = []; wires = []; clearPick(); pend = null; wiring = null; marq = null;
   cascade = 0; pan = {x:0, y:0}; zoom = ZDEF; zoomShow();
   docName = suggestName(); docDirty = false;
@@ -180,3 +185,168 @@ $("#hFile").addEventListener("change", function(){
   };
   rd.readAsText(f);
 });
+
+/* ---------- shared projects ---------- */
+/* Projects you build with other people. Each card is one shared sheet; the one
+   open now is marked. Invite with the code on the card, or join with someone's. */
+var shList = [], shLoaded = false;
+function avatars(people, max){
+  var box = document.createElement("span"), i, d;
+  max = max || 6;
+  box.className = "ppl";
+  for (i = 0; i < people.length && i < max; i++){
+    d = document.createElement("i");
+    d.textContent = String(people[i].name || "?").charAt(0).toUpperCase();
+    d.style.background = Collab.hue(people[i].color);
+    d.title = people[i].name + (people[i].note || "");
+    box.appendChild(d);
+  }
+  if (people.length > max){ d = document.createElement("i"); d.className = "more"; d.textContent = "+" + (people.length - max); box.appendChild(d); }
+  return box;
+}
+/* Back to your own sheet after a shared one: the one you had before, or a bare one. */
+function backToMine(){
+  var cur = null;
+  try { cur = JSON.parse(localStorage.getItem(CURKEY()) || "null"); } catch (err) {}
+  if (cur && cur.doc && load(cur.doc)){ docName = cur.doc.name || suggestName(); docDirty = !!cur.dirty; }
+  else {
+    nodes = []; wires = []; clearPick(); pend = null; wiring = null; marq = null;
+    pan = {x:0, y:0}; zoom = ZDEF; zoomShow(); reindex();
+    docName = suggestName(); docDirty = false;
+  }
+  nameChip(); evaluate(); draw();
+}
+function inviteAsk(p){
+  if (!p) return;
+  var link = location.origin + location.pathname + "?join=" + p.code;
+  ask({title:"Invite people", ok:"Copy link", value:link,
+    msg:"Send this link — or the code " + p.code + ", to type into Join on their Home page. They sign in with their own Logic Bench account, and then they can see and change everything on this sheet.",
+    done:function(){
+      var ok = function(){ flash("Invite link copied · code " + p.code); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(ok, function(){ flash("Code " + p.code + " · copy the link from the box"); });
+      else flash("Code " + p.code);
+    }});
+}
+function openShared(id){
+  var p = Collab.project();
+  if (p && p.id === id){ enterBench(); return; }
+  if (testMode) setTest(false);
+  keepBuild();
+  flash("Opening…");
+  Collab.open(id).then(function(pr){ enterBench(); flash("Opened “" + pr.name + "” · shared"); },
+    function(e){ flash(e.message); loadShared(); });
+}
+function sharedCard(p){
+  var el = document.createElement("div"), go = document.createElement("button"), nm = document.createElement("b"),
+      mt = document.createElement("small"), x = document.createElement("div"), open = Collab.project(), mine = Auth.current(), tag;
+  var live = !!open && open.id === p.id, owner = !!mine && p.owner === mine.id;
+  el.className = "card shared" + (live ? " now" : "");
+  go.type = "button"; go.className = "go";
+  nm.textContent = p.name;
+  mt.textContent = p.parts + " part" + (p.parts === 1 ? "" : "s") + " · " + p.members.length + " " +
+    (p.members.length === 1 ? "person" : "people") + " · code " + p.code;
+  if (live){ tag = document.createElement("i"); tag.textContent = " · open"; mt.appendChild(tag); }
+  go.appendChild(avatars(p.members.map(function(m){ return {name:m.name, color:m.color, note:m.id === p.owner ? " · owner" : ""}; }), 8));
+  go.appendChild(nm); go.appendChild(mt);
+  go.addEventListener("click", function(){ openShared(p.id); });
+  el.appendChild(go);
+  x.className = "acts";
+  var act = function(label, fn, cls, title){
+    var b = document.createElement("button");
+    b.type = "button"; b.textContent = label; b.title = title || label;
+    if (cls) b.className = cls;
+    b.addEventListener("click", function(ev){ ev.stopPropagation(); fn(); });
+    x.appendChild(b);
+  };
+  act("Open", function(){ openShared(p.id); }, "key");
+  act("Invite", function(){ inviteAsk(p); }, null, "Get the invite link and code");
+  if (owner) act("Delete", function(){
+    ask({title:"Delete shared project", ok:"Delete", danger:true,
+      msg:"Delete “" + p.name + "” for everyone in it? Nobody will be able to open it again. Save a copy first if you want to keep it.",
+      done:function(){
+        Collab.remove(p.id).then(function(){ if (live) backToMine(); flash("Deleted “" + p.name + "”"); loadShared(); },
+          function(e){ flash(e.message); });
+      }});
+  }, "danger", "Delete this project for everyone");
+  else act("Leave", function(){
+    ask({title:"Leave shared project", ok:"Leave", danger:true,
+      msg:"Leave “" + p.name + "”? It stays for the others, and you can join again with its code.",
+      done:function(){
+        Collab.leave(p.id).then(function(){ if (live) backToMine(); flash("Left “" + p.name + "”"); loadShared(); },
+          function(e){ flash(e.message); });
+      }});
+  }, "danger", "Take this project off your list");
+  el.appendChild(x);
+  return el;
+}
+function renderShared(){
+  var host = $("#shared"), cloud = Auth.cloud();
+  ["#shNew", "#shFrom", "#shJoin"].forEach(function(s){ $(s).hidden = !cloud; });
+  $("#shFrom").disabled = !nodes.length || Collab.active();
+  host.textContent = "";
+  if (!cloud){
+    host.dataset.empty = "";
+    $("#shNote").textContent = "Shared projects need the Logic Bench website — this offline copy has no server to share through.";
+    return;
+  }
+  $("#shNote").textContent = "Everyone in a project can change every part of it, and sees the others' changes and pointers within a second or two. Undo only takes back your own changes.";
+  shList.forEach(function(p){ host.appendChild(sharedCard(p)); });
+  host.dataset.empty = shList.length ? "" : (shLoaded ? "none" : "loading");
+}
+function loadShared(){
+  if (!Auth.cloud()) return;
+  Collab.list().then(function(l){ shList = l; shLoaded = true; if (!$("#home").hidden) renderShared(); },
+    function(e){ shLoaded = true; if (!$("#home").hidden){ renderShared(); $("#shNote").textContent = e.message; } });
+}
+$("#shNew").addEventListener("click", function(){
+  ask({title:"New shared project", ok:"Create", value:"Shared CPU",
+    msg:"An empty sheet that you and the people you invite all build on at once — one of you on the adder, another on the subtractor.",
+    check:function(v){ return v ? "" : "Give it a name."; },
+    done:function(v){
+      if (testMode) setTest(false);
+      keepBuild();
+      Collab.create(v, false).then(function(){ enterBench(); loadShared(); flash("“" + v + "” is ready · press Invite at the top to bring people in"); },
+        function(e){ flash(e.message); });
+    }});
+});
+$("#shFrom").addEventListener("click", function(){
+  if (!nodes.length || Collab.active()) return;
+  ask({title:"Share this sheet", ok:"Share", value:docName || "Shared build",
+    msg:"Makes a shared project that starts from the sheet you have open. Your own build stays as it is among your builds.",
+    check:function(v){ return v ? "" : "Give it a name."; },
+    done:function(v){
+      if (testMode) setTest(false);
+      keepBuild();
+      Collab.create(v, true).then(function(){ enterBench(); loadShared(); flash("Shared as “" + v + "” · press Invite at the top to bring people in"); },
+        function(e){ flash(e.message); });
+    }});
+});
+$("#shJoin").addEventListener("submit", function(e){
+  e.preventDefault();
+  var code = $("#shCode").value.trim();
+  if (!code){ $("#shCode").focus(); return; }
+  if (testMode) setTest(false);
+  keepBuild();
+  Collab.join(code).then(function(p){ $("#shCode").value = ""; enterBench(); loadShared(); flash("Joined “" + p.name + "”"); },
+    function(err){ flash(err.message); });
+});
+$("#shCode").addEventListener("keydown", function(e){ e.stopPropagation(); });
+$("#btnInvite").addEventListener("click", function(){ inviteAsk(Collab.project()); });
+
+/* the strip in the top bar: who is on this sheet with you, and whether it is live */
+function crewShow(){
+  var on = Collab.active(), st = Collab.status(), me = Auth.current(), list, seen = {};
+  if (on && st === "gone"){ Collab.stop(); backToMine(); homeShow(); return; }
+  $("#crew").hidden = !on;
+  if (!on) return;
+  $("#crewLive").className = "live " + st;
+  $("#crewLive").title = st === "offline" ? "Can't reach the server — your changes go up when it is back" : "Shared project · live";
+  list = me ? [{name:me.name + " (you)", color:me.color}] : [];
+  Collab.peers().forEach(function(h){
+    if (seen[h.u] || (me && h.u === me.id)) return;
+    seen[h.u] = 1; list.push({name:h.name, color:h.color});
+  });
+  $("#crewPpl").textContent = "";
+  $("#crewPpl").appendChild(avatars(list, 5));
+}
+Collab.onChange(crewShow);

@@ -660,10 +660,10 @@ function elbows(bad){
     }
     taken[col] = 1;
     trunk = addNode("POINT", col, pa.y);
-    wires.push({id:"w" + (seq++), a:src, q:sq, b:trunk.id, p:0, fa:null, fb:null});
+    wires.push({id:newId("w"), a:src, q:sq, b:trunk.id, p:0, fa:null, fb:null});
     for (i = 0; i < g.length; i++){
       p2 = addNode("POINT", col, g[i].pb.y);
-      wires.push({id:"w" + (seq++), a:trunk.id, q:0, b:p2.id, p:0, fa:null, fb:null});
+      wires.push({id:newId("w"), a:trunk.id, q:0, b:p2.id, p:0, fa:null, fb:null});
       g[i].w.a = p2.id; g[i].w.q = 0; g[i].w.fa = null;
       made++;
     }
@@ -870,9 +870,14 @@ function playSteps(steps){
 }
 /* The cleaner moves parts and adds corners, so it keeps the sheet it started
    from for Ctrl+Z. */
-function cleanUp(){
+function cleanUp(sure){
   if (testMode) return;
   if (!nodes.length){ flash("Nothing on the sheet to clean up yet."); return; }
+  if (Collab.active() && sure !== true && Collab.peers().length){
+    ask({title:"Tidy the shared sheet", ok:"Tidy it", msg:"The Cleaner rearranges every part on this sheet, including the parts others are working on right now. Ctrl+Z puts yours back.",
+      done:function(){ cleanUp(true); }});
+    return;
+  }
   pushUndo();
   var was = area(bounds());
   var step = stepTrack();            /* the sheet as it stands, to play back from */

@@ -66,7 +66,8 @@ sign in after that, and the session is remembered, so you can carry on building 
 
 - **On the website** accounts live on the server (`api/`, Vercel Functions). Passwords are kept as
   salted scrypt hashes; the session is an HttpOnly cookie that lasts 30 days. Each account's builds are
-  stored in a **private Vercel Blob store**, so signing in on any device brings them back.
+  stored on the server (Upstash Redis, or a private Vercel Blob store), so signing in on any device
+  brings them back.
 - The browser keeps a working copy and sends it up about a second after each change. The avatar in the
   header shows a grey dot while saving and an orange one when it can't reach the server (it retries,
   and anything unsent stays in the browser). If two devices save at once, the server refuses the stale
@@ -78,6 +79,38 @@ sign in after that, and the session is remembered, so you can carry on building 
 - There is no password reset yet. A username is a nickname, not proof of who someone is.
 - A new account opens straight onto an empty sheet; a returning one lands on its Home page.
 - The name in the header's top-right signs you out. Your sheet is kept first.
+
+## Shared projects
+
+Several people build one circuit on one sheet at the same time — one on the adder, another on the
+subtractor, all on the same CPU (`js/collab.js`, `api/projects.js`, `api/_lib/projects.js`).
+
+- **Home → Shared projects**: *New shared project* starts an empty shared sheet; *Share the sheet I'm
+  on* starts one from what is open; *Join* takes an invite code. **Invite** (on the card, or in the top
+  bar while the project is open) gives a link (`?join=CODE`) and the 6-character code. Whoever opens the
+  link signs in or makes an account and lands straight on the sheet.
+- **Everyone in a project can change everything in it.** Parts, wires, labels, switch positions, clock
+  speeds and ROM contents are shared. Each person's simulation (flip-flop states, RAM, a running clock's
+  phase) runs on their own screen.
+- The top bar shows a live dot, who is on the sheet, and **Invite**. Other people's pointers show on the
+  sheet with their name, and the parts they have picked are outlined in their colour.
+- **How it stays in step.** Every part and wire has an id, and each device tags the ids it makes with its
+  own mark so two people never make the same one. About once a second a device sends the parts and wires
+  it changed and gets back every change since the last one it saw. The server numbers each change set in
+  one atomic step (a Redis script), so every device replays the same changes in the same order, and the
+  latest change to a given part wins. A change that is still on its way from this device is never
+  overwritten by an older one from someone else, so a drag isn't yanked away mid-move. It checks about
+  once a second while others are on the sheet, every few seconds alone, and every few seconds in a
+  hidden tab.
+- **Undo** in a shared project takes back only your own work: a part someone else changed after that
+  point stays as they left it. The **Cleaner** asks first when others are on the sheet, since it moves
+  their parts too.
+- **Save** in a shared project keeps a copy among your own builds; the project itself saves for everyone
+  as you go. Renaming the build in the top bar renames the project for everyone.
+- **Leave** takes a project off your list (the last person out deletes it; if the owner leaves, the
+  longest-standing member becomes owner). **Delete** (owner only) removes it for everyone.
+- Up to 20 people and 20,000 parts and wires per project. Shared projects need the website; the
+  one-file offline copy shows the section but can't share.
 
 ## Arena
 
@@ -118,7 +151,8 @@ css/
 js/
   layout.js           picks the layout (runs first, in <head>)
   auth.js             accounts (server or browser-only), per-account storage, syncing builds up
-  core.js             constants, the part catalogue, state, colours, geometry
+  core.js             constants, the part catalogue, state, colours, geometry, new ids
+  collab.js           shared projects: keeping one sheet in step between people, their pointers
   shapes.js           drawing gates, switches, buttons and lamps
   symbols.js          drawing components, chips and displays
   sim.js              signal drive, every part's logic, clock edges, selection
@@ -130,7 +164,7 @@ js/
   builds.js           saving, the dialog, the toolbar, the examples
   timing.js           clocks, capacitors and inductors over time
   api.js              window.bench console API
-  home.js             home page, backup and restore
+  home.js             home page, backup and restore, shared project cards, the top-bar crew strip
   login.js            the login screen, the header account chip, sign out
   checker.js          the Arena checker: rules, every input pattern, size, speed, wiring
   arena.js            challenges, reference builds, standings, import/export, the Arena screens
@@ -139,8 +173,10 @@ js/
   offline.js          registers the service worker
 sw.js                 offline cache
 assets/               icon and fonts
-api/                  Vercel Functions: auth/{register,login,logout,me}, state (an account's builds)
-  _lib/               accounts, cookies and request helpers, the Blob (or local .data/) store
+api/                  Vercel Functions: auth/{register,login,logout,me}, state (an account's builds),
+                      projects (every shared-project call, by action)
+  _lib/               accounts, projects, cookies and request helpers; kv.js (Redis, with the two
+                      scripts), store.js (Redis, Blob, or local .data/ files)
 tools/bundle.mjs      packs everything into one offline HTML file
 tools/dev-server.mjs  serves the site and the api/ routes together, for local use
 ```
@@ -154,17 +190,26 @@ npm install
 npm run dev           # http://localhost:3000, with the /api routes
 ```
 
-Locally, with no Blob token set, accounts and builds are kept as files in `.data/` (git-ignored).
-Opening `index.html` straight from disk works too, with browser-only accounts.
+Locally, with no Redis or Blob set, accounts and builds are kept as files in `.data/` (git-ignored)
+and shared projects are kept in memory until the server stops — open two browser profiles (or one
+normal and one private window) to try building together. Opening `index.html` straight from disk works
+too, with browser-only accounts.
 
 ## Deploy (Vercel)
 
 Import this repo in Vercel with the framework preset **Other** and no build command. The pages
 are static; the `api/` folder is deployed as Node functions. Every push to `main` redeploys.
 
-Accounts need storage, once: in the Vercel project open **Storage → Create → Blob**, choose
-**Private** access, and connect it to the project (this sets `BLOB_READ_WRITE_TOKEN`). Then redeploy.
-Until a store is connected, creating an account shows a message saying so — nothing is silently lost.
+It needs storage, once: in the Vercel project open **Storage**, add **Upstash for Redis** from the
+Marketplace (the free plan is enough to start), connect it to the project — this sets `KV_REST_API_URL`
+and `KV_REST_API_TOKEN` — and redeploy. Redis then holds accounts, builds and shared projects.
+
+Why Redis and not only Blob: a shared project syncs about once a second per person. Blob's free Hobby
+allowance is 2,000 uploads and 10,000 reads a month, and going over locks Blob for 30 days, which a
+couple of afternoons of building together would do. Upstash's free tier is 500,000 commands a month,
+and one sync is a handful of commands. If only a Blob store is connected, accounts and builds still work from it,
+and shared projects say Redis is needed. Until either is connected, creating an account shows a message
+saying so — nothing is silently lost.
 
 ## One-file offline copy
 

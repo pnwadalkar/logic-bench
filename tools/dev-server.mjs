@@ -14,7 +14,8 @@ const routes = {
   "/api/auth/login": require("../api/auth/login.js"),
   "/api/auth/logout": require("../api/auth/logout.js"),
   "/api/auth/me": require("../api/auth/me.js"),
-  "/api/state": require("../api/state.js")
+  "/api/state": require("../api/state.js"),
+  "/api/projects": require("../api/projects.js")
 };
 const types = {
   ".html": "text/html; charset=utf-8",

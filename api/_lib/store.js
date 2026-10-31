@@ -1,6 +1,7 @@
 /* Where accounts and benches are kept.
-   On Vercel this is a private Blob store (BLOB_READ_WRITE_TOKEN, or OIDC +
-   BLOB_STORE_ID). Locally, with neither of those set, it is the .data folder
+   On Vercel this is Upstash Redis when it is connected (see kv.js) — it takes
+   frequent small writes cheaply — or else a private Blob store
+   (BLOB_READ_WRITE_TOKEN, or OIDC + BLOB_STORE_ID). Locally, with neither of those set, it is the .data folder
    so the login can be tried without a store. A Vercel deploy with no store
    connected refuses to write, rather than pretending a temporary disk is durable. */
 "use strict";
@@ -8,6 +9,9 @@
 const fs = require("fs");
 const path = require("path");
 const { StoreError } = require("./errors");
+const kvMod = require("./kv");
+
+const SESSION_TTL = 30 * 24 * 60 * 60;
 
 const KEY = /^logic-bench\/(users|sessions|state)\/[a-f0-9]{64}\.json$/;
 
@@ -51,6 +55,10 @@ async function streamText(stream) {
 
 async function readJson(key) {
   if (!KEY.test(key)) throw new StoreError("BADKEY", "Bad storage key.");
+  if (kvMod.configured()) {
+    const text = await kvMod.kv().get(key);
+    return text ? JSON.parse(text) : null;
+  }
   if (blobConfigured()) {
     const { get } = await blobApi();
     const result = await get(key, { access: "private", useCache: false });
@@ -60,7 +68,7 @@ async function readJson(key) {
   }
   if (process.env.VERCEL) {
     throw new StoreError("UNAVAILABLE",
-      "Account storage is not connected. In the Vercel project open Storage, create a private Blob store, connect it to this project, and redeploy.");
+      "Account storage is not connected. In the Vercel project open Storage, add Upstash for Redis (or a private Blob store), connect it to this project, and redeploy.");
   }
   try {
     return JSON.parse(fs.readFileSync(fileOf(key), "utf8"));
@@ -73,6 +81,12 @@ async function readJson(key) {
 async function writeJson(key, value, exclusive) {
   if (!KEY.test(key)) throw new StoreError("BADKEY", "Bad storage key.");
   const body = JSON.stringify(value);
+  if (kvMod.configured()) {
+    const opt = { nx: !!exclusive };
+    if (key.indexOf("logic-bench/sessions/") === 0) opt.ex = SESSION_TTL;
+    if (!await kvMod.kv().set(key, body, opt)) throw new StoreError("EXISTS", "Already there.");
+    return;
+  }
   if (blobConfigured()) {
     const { put } = await blobApi();
     try {
@@ -105,6 +119,7 @@ async function writeJson(key, value, exclusive) {
 
 async function remove(key) {
   if (!KEY.test(key)) throw new StoreError("BADKEY", "Bad storage key.");
+  if (kvMod.configured()) { await kvMod.kv().del(key); return; }
   if (blobConfigured()) {
     const { del } = await blobApi();
     await del(key);
