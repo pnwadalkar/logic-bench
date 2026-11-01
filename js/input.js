@@ -253,8 +253,10 @@ window.addEventListener("pointerup", function(e){
         if (drag.spawn){
           r = cv.getBoundingClientRect();
           if (e.clientX < r.left + 4 || e.clientX > r.right - 4 || e.clientY < r.top + 4 || e.clientY > r.bottom - 4){
-            n.x = (70 - pan.x) / zoom + (cascade % 5) * 20;
-            n.y = (60 - pan.y) / zoom + (cascade % 7) * 36;
+            /* let go off the sheet: bring it in, with a whole saved area moving as one */
+            var tx = (70 - pan.x) / zoom + (cascade % 5) * 20, ty = (60 - pan.y) / zoom + (cascade % 7) * 36;
+            var sx = tx - n.x, sy = ty - n.y;
+            for (i = 0; i < drag.off.length; i++){ drag.off[i].o.x += sx; drag.off[i].o.y += sy; }
             cascade++;
           }
         }

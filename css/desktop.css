@@ -1,19 +1,25 @@
-/* Laptop and desktop layout: slim header, parts rail down the left, schematic sheet filling the rest.
-   Sized for a mouse or trackpad. At phone width the rail drops to a scrolling strip along the bottom. */
+/* Laptop and desktop layout: slim header, schematic sheet filling the middle, parts console docked along the bottom.
+   Sized for a mouse or trackpad. At phone width the console squeezes to bare icons. */
 :where([data-layout="desktop"]) button{padding:6px 9px}
 [data-layout="desktop"] #btnFull{display:none}
 /* the tip keeps to one line, so the buttons never wrap under it; hovering shows all of it */
 [data-layout="desktop"] #tip{flex:1 1 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:860px){[data-layout="desktop"] #tip{display:none}}
 
-[data-layout="desktop"] #rail{width:auto;border-right:1px solid var(--grid);overflow-y:auto;scrollbar-gutter:stable;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:10px;padding-block:10px}
-[data-layout="desktop"] .gp+.gp{margin-top:12px}
-[data-layout="desktop"] .grp{margin:2px 0 7px}
-[data-layout="desktop"] #rail .set{flex-direction:column}
-[data-layout="desktop"] .part{gap:7px;padding:3px 5px;border-radius:5px}
-/* the tabs wrap inside the rail rather than widening it */
-[data-layout="desktop"] .cats{width:0;min-width:100%;margin-bottom:8px}
+/* the parts console runs along the bottom, tools then parts, under the sheet */
+[data-layout="desktop"] #main{flex-direction:column}
+[data-layout="desktop"] #rail{order:2;border-top:1px solid var(--grid);
+  display:flex;flex-wrap:wrap;align-items:flex-start;column-gap:24px;row-gap:8px;
+  overflow-x:auto;overflow-y:hidden;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:8px;padding-bottom:max(8px,env(safe-area-inset-bottom,0px))}
+[data-layout="desktop"] #rail .gp{flex:none}
+[data-layout="desktop"] .grp{margin:0 0 6px 4px}
+[data-layout="desktop"] #rail .set{flex-direction:row;gap:2px}
+[data-layout="desktop"] .part{flex-direction:column;gap:3px;padding:4px 5px 5px;border-radius:6px}
+[data-layout="desktop"] .part span{font-size:10px}
+[data-layout="desktop"] .cats{gap:4px;margin-bottom:6px}
+[data-layout="desktop"] .cat{padding:6px 10px;font-size:10px}
 
 [data-layout="desktop"] #zoom{border-radius:6px}
 [data-layout="desktop"] #zoom button{padding:8px 10px;min-width:34px;font-size:12px}
@@ -21,11 +27,6 @@
 [data-layout="desktop"] .card .acts button{padding:7px 4px}
 
 @media (max-width:620px){
-  [data-layout="desktop"] #main{flex-direction:column}
-  [data-layout="desktop"] #rail{width:auto;border-right:0;border-top:1px solid var(--grid);order:2;
-    display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;padding-block:8px}
-  [data-layout="desktop"] .gp+.gp{margin-top:0}
-  [data-layout="desktop"] #rail .set{flex-direction:row}
   [data-layout="desktop"] .grp{display:none}
   [data-layout="desktop"] .part span{display:none}
   [data-layout="desktop"] .part{padding:5px}

@@ -297,11 +297,81 @@ function setPasteMode(on){
   draw();
 }
 
+/* ---------- saved areas ---------- */
+/* An area you boxed in can be named and kept on the Electronics tab, then dragged
+   out again as often as you like. They are kept in this browser, per account. */
+function areaRead(){
+  try {
+    var o = JSON.parse(localStorage.getItem(Auth.key("areas")) || "{}");
+    return (o && typeof o === "object") ? o : {};
+  } catch (err) { return {}; }
+}
+function areaWrite(o){
+  try { localStorage.setItem(Auth.key("areas"), JSON.stringify(o)); return true; }
+  catch (err) { return false; }
+}
+/* the saved names, oldest first, so a new one lands at the end of the shelf */
+function areaNames(){
+  var o = areaRead();
+  return Object.keys(o).sort(function(a, b){ return (o[a].at || 0) - (o[b].at || 0); });
+}
+function showShelf(){
+  for (var i = 0; i < CATS.length; i++) if (CATS[i].u) railCat = i;
+  try { localStorage.setItem(CATKEY, String(railCat)); } catch (err) {}
+  buildRail();
+}
+function saveArea(){
+  if (testMode) return;
+  if (!pickN.size){ flash("Nothing picked — drag a box round the part of the circuit you want."); return; }
+  var c = clipFrom();
+  if (!c){ flash("Nothing to save there."); return; }
+  ask({title:"Save area", ok:"Save", value:"",
+    msg:"Give this " + c.nodes.length + "-part area a name. It goes on the Electronics tab, ready to drag out again.",
+    check:function(v){
+      if (!v) return "Give the area a name.";
+      if (areaRead()[v]) return "There's already an area called “" + v + "” — pick another name.";
+      return "";
+    },
+    done:function(v){
+      var o = areaRead();
+      o[v] = {at:Date.now(), clip:c};
+      if (!areaWrite(o)){ flash("Couldn't save — this browser's storage is full or blocked."); return; }
+      showShelf();
+      flash("Saved “" + v + "” on the Electronics tab");
+    }});
+}
+function askDeleteArea(name){
+  ask({title:"Delete area", ok:"Delete", danger:true,
+    msg:"Delete the saved area “" + name + "”? Copies already on the sheet stay.",
+    done:function(){
+      var o = areaRead(); delete o[name]; areaWrite(o);
+      buildRail();
+      flash("Deleted “" + name + "”");
+    }});
+}
+/* Pick a saved area off the shelf: a copy lands under the pointer and rides with
+   it, the same as a part dragged out of the console. */
+function spawnArea(name, e){
+  var a = areaRead()[name], keep = clip, p, n;
+  if (testMode || !a || !a.clip || !a.clip.nodes || !a.clip.nodes.length) return;
+  setWireMode(false);
+  if (pasteMode) setPasteMode(false);
+  p = toWorld(e);
+  clip = a.clip;
+  pasteClip({x:p.x - a.clip.w / 2, y:p.y - a.clip.h / 2});
+  clip = keep; markTool();
+  n = pickNodes()[0];
+  if (!n) return;
+  drag = {id:n.id, off:dragSet(p, n, true), moved:true, spawn:true};
+  evaluate(); draw();
+}
+
 /* the bar over the picked area */
 $("#pick").addEventListener("click", function(e){
   var a = e.target && e.target.getAttribute ? e.target.getAttribute("data-a") : null;
   if (!a) return;
-  if (a === "copy") copyPick(false);
+  if (a === "save") saveArea();
+  else if (a === "copy") copyPick(false);
   else if (a === "cut") copyPick(true);
   else if (a === "dup") dupPick();
   else if (a === "del") removeSel();

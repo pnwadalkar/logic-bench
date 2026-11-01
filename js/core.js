@@ -126,14 +126,15 @@ var TYPES = {
   ROM:   {n:"ROM 16×4", k:"chip", ab:"ROM", mid:46, pi:["A0","A1","A2","A3"], po:["D0","D1","D2","D3"],
     tip:"ROM: sixteen 4-bit words, read by address · double-click to program it"}
 };
-/* The families the parts rail offers, a tab each. */
+/* The families the parts console offers, a tab each. Electronics holds no
+   fixed parts: u marks it as the shelf of areas you name and save yourself
+   (see saveArea in edit.js). The other part types are still known to the
+   bench, so a build that already uses one loads as it always did. */
 var CATS = [
-  {n:"Signals",    t:["SWITCH","BUTTON","CLOCK","HEXIN","LAMP","HEXD","SEG7"]},
-  {n:"Gates",      t:["AND","OR","NOT","NAND","NOR","XOR","XNOR","BUF","TRI"]},
-  {n:"Electronic", t:["VCC","GND","RES","DIODE","CAP","IND","NMOS","PMOS","NPN","PNP"]},
-  {n:"Arithmetic", t:["HADD","FADD","ADD4","CMP4","ALU"]},
-  {n:"Routing",    t:["MUX2","MUX4","DEMUX4","DEC24","DEC38","ENC42"]},
-  {n:"Memory",     t:["SRL","DL","DFF","JKFF","TFF","REG4","SHR4","CNT4","RAM","ROM"]}
+  {n:"Signals",     t:["SWITCH","BUTTON","CLOCK","HEXIN","LAMP","HEXD","SEG7"]},
+  {n:"Gates",       t:["AND","OR","NOT","NAND","NOR","XOR","XNOR","BUF","TRI"]},
+  {n:"Arithmetic",  t:["HADD","FADD","ADD4","CMP4","ALU"]},
+  {n:"Electronics", t:[], u:1}
 ];
 /* A chip is a box of named pins, PITCH apart, under a title row. Its size, and
    which inputs may be left open — a name ending "=0" or "=1" says what an open

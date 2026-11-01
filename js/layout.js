@@ -1,6 +1,6 @@
 /* Which layout the bench opens in, decided before the page paints.
-   A laptop or desktop gets the parts rail down the left; a tablet or phone gets
-   the touch layout, with the parts console docked along the bottom.
+   Both layouts dock the parts console along the bottom; a laptop or desktop is
+   sized for a mouse, a tablet or phone gets the bigger touch layout.
    ?layout=desktop or ?layout=tablet forces one and is remembered on this device;
    ?layout=auto goes back to deciding by itself. */
 "use strict";

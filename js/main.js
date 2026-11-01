@@ -28,7 +28,7 @@ function boot(hot){
   if (!ok && !Object.keys(libRead()).length){
     /* a new account has nothing yet: straight onto a bare sheet, ready to build */
     newSheet(); enterBench();
-    flash("Welcome, " + Auth.current().name + " · drag a part in from the rail");
+    flash("Welcome, " + Auth.current().name + " · drag a part in from the console below");
     sharedOnBoot();
     return;
   }

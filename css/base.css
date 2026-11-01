@@ -56,7 +56,7 @@ button.danger:hover{border-color:var(--hot);color:var(--hot)}
 #rail{flex:none;background:var(--panel);overscroll-behavior:contain;scrollbar-width:thin}
 .grp{font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 #rail .set{display:flex;gap:4px}
-.part{display:flex;align-items:center;border:1px solid transparent;
+.part{position:relative;display:flex;align-items:center;border:1px solid transparent;
   cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .part:hover{border-color:var(--line);background:var(--canvas)}
 .part.on{border-color:var(--accent);background:var(--canvas)}
@@ -67,6 +67,12 @@ button.danger:hover{border-color:var(--hot);color:var(--hot)}
 .cats{display:flex;flex-wrap:wrap;gap:3px}
 .cat{padding:4px 6px;font-size:9px;letter-spacing:.06em;border-color:var(--grid);color:var(--muted)}
 .cat.on{border-color:var(--accent);color:var(--accent);background:var(--canvas)}
+/* a saved area's delete cross, and the note on an empty shelf */
+.part .x{position:absolute;top:1px;right:1px;padding:0;width:16px;height:16px;line-height:14px;font-size:9px;
+  border-radius:50%;border-color:var(--grid);background:var(--panel);color:var(--muted);opacity:0}
+.part:hover .x,.part .x:focus-visible{opacity:1}
+@media (pointer:coarse){.part .x{opacity:1}}
+.empty{margin:0;max-width:300px;align-self:center;font:400 11px/1.5 var(--sans);color:var(--muted)}
 /* a rail tool with nothing loaded into it yet */
 .part.off{opacity:.4}
 /* test mode: the parts rail goes inert, so the sheet can only be driven, not edited */

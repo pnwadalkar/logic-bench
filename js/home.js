@@ -139,7 +139,7 @@ $("#btnHome").addEventListener("click", homeShow);
 $("#hBack").addEventListener("click", enterBench);
 $("#hNew").addEventListener("click", function(){
   newSheet(); enterBench();
-  flash("New sheet · drag a part in from the rail");
+  flash("New sheet · drag a part in from the console below");
 });
 $("#hEg").addEventListener("click", function(){ example(); enterBench(); });
 $("#hEg2").addEventListener("click", function(){ example2(); enterBench(); });

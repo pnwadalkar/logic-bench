@@ -163,6 +163,7 @@ function buildRail(){
       b.classList.toggle("on", i === k); b.setAttribute("aria-selected", i === k ? "true" : "false");
     });
     set.textContent = "";
+    if (CATS[k].u){ shelf(set, item); return; }
     CATS[k].t.forEach(function(t){ item(set, t, TYPES[t].n, railIcon(t), spawn(t), TYPES[t].tip); });
   };
   cats.textContent = "";
@@ -175,6 +176,45 @@ function buildRail(){
   });
   show(railCat >= 0 && railCat < CATS.length ? railCat : 0);
   markTool();
+}
+/* A saved area pictured as its parts in miniature, inside a dashed band. */
+function areaIcon(c){
+  var cv2 = document.createElement("canvas"), g, k, ox, oy, i, d, n;
+  cv2.width = 100; cv2.height = 68; cv2.style.width = "50px"; cv2.style.height = "34px";
+  g = cv2.getContext("2d"); g.setTransform(2, 0, 0, 2, 0, 0);
+  k = Math.min(1, 38 / Math.max(c.w, 1), 22 / Math.max(c.h, 1));
+  ox = (50 - c.w * k) / 2; oy = (34 - c.h * k) / 2;
+  g.strokeStyle = C.accent; g.lineWidth = 1.2; g.setLineDash([3, 2.5]);
+  g.strokeRect(ox - 3.5, oy - 3.5, c.w * k + 7, c.h * k + 7); g.setLineDash([]);
+  g.fillStyle = C.line;
+  for (i = 0; i < c.nodes.length; i++){
+    n = c.nodes[i]; d = TYPES[n.t];
+    if (!d) continue;
+    g.fillRect(ox + n.x * k, oy + n.y * k, Math.max(2, d.w * k), Math.max(2, d.h * k));
+  }
+  return cv2;
+}
+/* The Electronics tab: the areas you saved, oldest first. It starts empty. */
+function shelf(set, item){
+  var names = areaNames(), o = areaRead(), p;
+  if (!names.length){
+    p = document.createElement("p"); p.className = "empty";
+    p.textContent = "Empty. Box in an area with Region, then press Save area on the bar over it.";
+    set.appendChild(p);
+    return;
+  }
+  names.forEach(function(name){
+    var c = o[name].clip, np = c.nodes.length;
+    item(set, "AREA", name, areaIcon(c), function(e){
+      e.preventDefault(); spawnArea(name, e);
+    }, name + " · " + np + " part" + (np === 1 ? "" : "s") + " — drag it onto the sheet");
+    var el = set.lastChild, x = document.createElement("button");
+    x.type = "button"; x.className = "x"; x.textContent = "✕";
+    x.title = "Delete “" + name + "”"; x.setAttribute("aria-label", "Delete the saved area " + name);
+    x.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+    x.addEventListener("click", function(e){ e.stopPropagation(); askDeleteArea(name); });
+    el.appendChild(x);
+  });
 }
 var CATKEY = "logicbench.cat", railCat = 0;
 try { railCat = parseInt(localStorage.getItem(CATKEY) || "0", 10) || 0; } catch (err) {}
