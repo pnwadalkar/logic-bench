@@ -21,9 +21,16 @@
   --shade:rgba(0,0,0,.6);
   color-scheme:dark}
 
-html,body{height:100%}
+/* The page is pinned to the visible viewport. On a tablet the browser's own bar
+   slides in and out while a part is dragged, and a page that is merely "100% high"
+   follows the wrong one of the two heights and gets its bottom edge — the console —
+   cut off until the next resize. --app-h is kept equal to the visual viewport by
+   js/main.js; dvh is the fallback before it runs. */
+html,body{height:100%;overscroll-behavior:none}
+html{position:fixed;inset:0;width:100%;height:var(--app-h,100dvh);overflow:hidden}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);overflow:hidden;
-  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none}
+  -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none;
+  position:fixed;inset:0;width:100%;height:var(--app-h,100dvh)}
 #app{height:100%;display:flex;flex-direction:column;min-height:0}
 
 header{background:var(--panel);border-bottom:1px solid var(--grid);flex:none}
@@ -77,8 +84,12 @@ button.danger:hover{border-color:var(--hot);color:var(--hot)}
 .part.off{opacity:.4}
 /* test mode: the parts rail goes inert, so the sheet can only be driven, not edited */
 #rail.lock{opacity:.42;pointer-events:none}
-#stage{flex:1 1 auto;min-width:0;position:relative;background:var(--canvas)}
-#cv{display:block;width:100%;height:100%;touch-action:none;cursor:default}
+/* min-height:0 lets the sheet shrink when the console above/below it grows. The canvas is
+   taken out of the flow: its bitmap size (client size x devicePixelRatio) must never
+   count as the stage's minimum height, or on a scaled laptop screen the sheet can only
+   ever grow and pushes the parts console off the bottom of the window. */
+#stage{flex:1 1 0;min-width:0;min-height:0;position:relative;overflow:hidden;background:var(--canvas)}
+#cv{position:absolute;inset:0;display:block;width:100%;height:100%;touch-action:none;cursor:default}
 #ren{position:absolute;font:500 11px var(--mono);width:66px;padding:2px 4px;
   border:1px solid var(--accent);border-radius:3px;background:var(--panel);color:var(--fg)}
 

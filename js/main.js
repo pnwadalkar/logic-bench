@@ -3,6 +3,23 @@
 
 /* ---------- boot ---------- */
 $("#tip").title = TIP_EDIT;
+/* Keep the page exactly as tall as what can be seen. On a tablet the browser bar
+   comes and goes mid-drag; the visual viewport is the one height that always
+   tells the truth, and the page is scrolled back to the top whenever the browser
+   tries to nudge it, so the console along the bottom is never left half off screen. */
+(function(){
+  var vv = window.visualViewport, root = document.documentElement;
+  var fit = function(){
+    var h = vv ? vv.height : window.innerHeight;
+    if (h > 0) root.style.setProperty("--app-h", Math.round(h) + "px");
+    if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  };
+  fit();
+  if (vv){ vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); }
+  window.addEventListener("resize", fit);
+  window.addEventListener("orientationchange", function(){ setTimeout(fit, 250); });
+  window.addEventListener("scroll", fit, {passive:true});
+})();
 readColors();
 sizeCanvas();
 if (window.ResizeObserver){
