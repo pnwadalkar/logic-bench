@@ -3,6 +3,8 @@
 "use strict";
 
 var PINFONT = '500 9px "IBM Plex Mono", monospace', TITLEFONT = '600 9px "IBM Plex Mono", monospace';
+var PINTEXT = null;          /* pin-name colour while a chip with a dark body is being drawn */
+var USERCHIP = "#0d1016", USERFONT = '700 11px "IBM Plex Mono", monospace';
 /* the segments each hex digit lights, a to g as bits 0 to 6 */
 var HEXSEG = [0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F,0x77,0x7C,0x39,0x5E,0x79,0x71];
 
@@ -52,7 +54,7 @@ function pinName(c, s, x, y, side, on){
     x += 4;
   }
   c.font = PINFONT; c.textAlign = side; c.textBaseline = "middle";
-  c.fillStyle = on ? C.hot : C.muted;
+  c.fillStyle = on ? C.hot : (PINTEXT || C.muted);
   c.fillText(t, x, y + 0.5);
   if (bar){
     tw = c.measureText(t).width; x1 = side === "right" ? x - tw : x;
@@ -103,11 +105,19 @@ var DRAW = {
     var d = TYPES[n.t], x = n.x, y = n.y, w = d.w, h = d.h, i, p;
     stubs(c, n, stub);
     c.lineWidth = 1.6; roundRect(c, x, y, w, h, 4);
-    c.fillStyle = C.body; c.fill(); c.strokeStyle = C.line; c.stroke();
-    c.font = TITLEFONT; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = C.fg;
+    /* a chip you made is black, like the real thing, with its name on the lid */
+    c.fillStyle = d.user ? USERCHIP : C.body; c.fill(); c.strokeStyle = d.user ? "#4a5366" : C.line; c.stroke();
+    c.font = d.user ? USERFONT : TITLEFONT; c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillStyle = d.user ? "#f4f6fa" : C.fg;
     c.fillText(d.ab, x + w / 2, y + 8.5);
+    if (d.user){                       /* the notch that marks the top of a chip */
+      c.beginPath(); c.arc(x + w / 2, y, 3.2, 0, Math.PI);
+      c.fillStyle = C.body; c.fill(); c.strokeStyle = "#4a5366"; c.lineWidth = 1.1; c.stroke();
+    }
+    PINTEXT = d.user ? "#c9d1de" : null;
     for (i = 0; i < d.ins; i++){ p = inPort(n, i); pinName(c, d.pn[i], x + 4, p.y, "left", inLit(n, i)); }
     for (i = 0; i < nOut(n); i++){ p = outPort(n, i); pinName(c, d.po[i], x + w - 4, p.y, "right", lvl(n, i)); }
+    PINTEXT = null;
     if (INSIDE[n.t]) INSIDE[n.t](c, n, x, y, w, h);
   },
   vcc: function(c, n, stub){
@@ -241,8 +251,10 @@ function chipIcon(g, t){
   k = Math.min(d.outs, 4);
   for (i = 0; i < k; i++) seg(g, x + w, y + h * (i + 1) / (k + 1), x + w + 5, y + h * (i + 1) / (k + 1));
   roundRect(g, x, y, w, h, 3);
-  g.fillStyle = C.body; g.fill(); g.strokeStyle = C.line; g.lineWidth = 1.3; g.stroke();
-  g.font = '600 ' + (d.ab.length > 4 ? 6.5 : 7.5) + 'px "IBM Plex Mono", monospace';
-  g.fillStyle = C.fg; g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillText(d.ab, x + w / 2, y + h / 2 + 0.5);
+  g.fillStyle = d.user ? USERCHIP : C.body; g.fill(); g.strokeStyle = d.user ? "#4a5366" : C.line; g.lineWidth = 1.3; g.stroke();
+  /* a name too long for the icon is cut short; the tile's label under it says it all */
+  var ab = d.user && d.ab.length > 6 ? d.ab.slice(0, 5) + "…" : d.ab;
+  g.font = '600 ' + (ab.length > 4 ? 6.5 : 7.5) + 'px "IBM Plex Mono", monospace';
+  g.fillStyle = d.user ? "#f4f6fa" : C.fg; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(ab, x + w / 2, y + h / 2 + 0.5);
 }

@@ -2,8 +2,42 @@
 "use strict";
 
 /* ---------- build model <-> plain data ---------- */
+/* The definitions of the chips you made that a sheet uses — and the chips inside
+   those — so a build carries its chips with it: it opens on another device, and
+   goes on working after the saved chip is deleted from the shelf. */
+function chipsUsed(){
+  var out = {}, todo = nodes.map(function(n){ return n.t; }), key, t;
+  while (todo.length){
+    key = todo.pop(); t = TYPES[key];
+    if (!t || !t.user || out[key]) continue;
+    out[key] = {name:t.n, clip:t.clip};
+    t.clip.nodes.forEach(function(n){ todo.push(n.t); });
+  }
+  return out;
+}
+/* and the other way: make the types a build's chip definitions describe. A
+   definition that is not what it says it is, or uses a part this bench does not
+   know, is left out, and the chips of it drop out of the sheet as any unknown
+   part does. */
+function loadChips(defs){
+  var keys, made = [], k2;
+  if (!defs || typeof defs !== "object") return;
+  keys = Object.keys(defs);
+  keys.forEach(function(key){
+    var d = defs[key], c = d && d.clip;
+    if (TYPES[key] || !d || typeof d.name !== "string" || !c || !Array.isArray(c.nodes) || !Array.isArray(c.wires)) return;
+    if (c.nodes.length > 2000 || c.wires.length > 8000) return;
+    k2 = defineUserChip(d.name.slice(0, 40), c);
+    if (k2 !== key) TYPES[key] = TYPES[k2];
+    made.push([key, k2]);
+  });
+  made.forEach(function(m){
+    var t = TYPES[m[0]];
+    if (t && !t.clip.nodes.every(function(n){ return n && TYPES[n.t]; })){ delete TYPES[m[0]]; delete TYPES[m[1]]; }
+  });
+}
 function snapshot(){
-  return {
+  var chips = chipsUsed(), o = {
     v:1, name:docName,
     nodes:nodes.map(function(n){
       var o = {id:n.id, t:n.t, x:n.x, y:n.y, s:n.s, l:n.l};
@@ -19,12 +53,15 @@ function snapshot(){
     }),
     seq:seq, pan:{x:pan.x, y:pan.y}, zoom:zoom
   };
+  if (Object.keys(chips).length) o.chips = chips;
+  return o;
 }
 /* The parts and wires a build holds, as live objects — anything that does not
    belong on a sheet is dropped. load() puts them on the sheet; the arena's
    checker runs them where they are. */
 function graphOf(d){
   var ids = {}, ns, ws;
+  if (d.chips) loadChips(d.chips);
   ns = d.nodes.filter(function(n){ return n && n.id && TYPES[n.t]; }).map(function(n){
     ids[n.id] = nOut({t:n.t});
     var o = {id:n.id, t:n.t, x:+n.x || 0, y:+n.y || 0, v:0, s:(n.s | 0) & 15, l:n.l || "", iv:[]};

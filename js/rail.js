@@ -177,40 +177,25 @@ function buildRail(){
   show(railCat >= 0 && railCat < CATS.length ? railCat : 0);
   markTool();
 }
-/* A saved area pictured as its parts in miniature, inside a dashed band. */
-function areaIcon(c){
-  var cv2 = document.createElement("canvas"), g, k, ox, oy, i, d, n;
-  cv2.width = 100; cv2.height = 68; cv2.style.width = "50px"; cv2.style.height = "34px";
-  g = cv2.getContext("2d"); g.setTransform(2, 0, 0, 2, 0, 0);
-  k = Math.min(1, 38 / Math.max(c.w, 1), 22 / Math.max(c.h, 1));
-  ox = (50 - c.w * k) / 2; oy = (34 - c.h * k) / 2;
-  g.strokeStyle = C.accent; g.lineWidth = 1.2; g.setLineDash([3, 2.5]);
-  g.strokeRect(ox - 3.5, oy - 3.5, c.w * k + 7, c.h * k + 7); g.setLineDash([]);
-  g.fillStyle = C.line;
-  for (i = 0; i < c.nodes.length; i++){
-    n = c.nodes[i]; d = TYPES[n.t];
-    if (!d) continue;
-    g.fillRect(ox + n.x * k, oy + n.y * k, Math.max(2, d.w * k), Math.max(2, d.h * k));
-  }
-  return cv2;
-}
-/* The Electronics tab: the areas you saved, oldest first. It starts empty. */
+/* The Electronics tab: the chips you saved, oldest first — each a small black chip
+   with its name on it. It starts empty. */
 function shelf(set, item){
-  var names = areaNames(), o = areaRead(), p;
+  var names = areaNames(), p;
   if (!names.length){
     p = document.createElement("p"); p.className = "empty";
-    p.textContent = "Empty. Box in an area with Region, then press Save area on the bar over it.";
+    p.textContent = "Empty. Box in a circuit with Region, then press Save on the bar over it — it becomes a black chip here, its switches the inputs and its lamps the outputs.";
     set.appendChild(p);
     return;
   }
   names.forEach(function(name){
-    var c = o[name].clip, np = c.nodes.length;
-    item(set, "AREA", name, areaIcon(c), function(e){
+    var key = areaKey(name);
+    if (!key) return;
+    item(set, "AREA", name, railIcon(key), function(e){
       e.preventDefault(); spawnArea(name, e);
-    }, name + " · " + np + " part" + (np === 1 ? "" : "s") + " — drag it onto the sheet");
+    }, TYPES[key].tip + " — drag it onto the sheet");
     var el = set.lastChild, x = document.createElement("button");
     x.type = "button"; x.className = "x"; x.textContent = "✕";
-    x.title = "Delete “" + name + "”"; x.setAttribute("aria-label", "Delete the saved area " + name);
+    x.title = "Delete “" + name + "”"; x.setAttribute("aria-label", "Delete the saved chip " + name);
     x.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
     x.addEventListener("click", function(e){ e.stopPropagation(); askDeleteArea(name); });
     el.appendChild(x);

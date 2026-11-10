@@ -298,8 +298,9 @@ function setPasteMode(on){
 }
 
 /* ---------- saved areas ---------- */
-/* An area you boxed in can be named and kept on the Electronics tab, then dragged
-   out again as often as you like. They are kept in this browser, per account. */
+/* A circuit you boxed in can be named and kept on the Electronics tab as a chip
+   (see defineUserChip in core.js), then dragged out again as often as you like.
+   They are kept in this browser, per account. */
 function areaRead(){
   try {
     var o = JSON.parse(localStorage.getItem(Auth.key("areas")) || "{}");
@@ -320,49 +321,64 @@ function showShelf(){
   try { localStorage.setItem(CATKEY, String(railCat)); } catch (err) {}
   buildRail();
 }
+/* A saved area is a chip: the part type made from it, made the first time it is
+   asked for (areas saved before chips existed get theirs here too). */
+function areaKey(name, a){
+  a = a || areaRead()[name];
+  if (!a || !a.clip || !Array.isArray(a.clip.nodes) || !Array.isArray(a.clip.wires)) return null;
+  return defineUserChip(name, a.clip);
+}
 function saveArea(){
   if (testMode) return;
   if (!pickN.size){ flash("Nothing picked — drag a box round the part of the circuit you want."); return; }
   var c = clipFrom();
   if (!c){ flash("Nothing to save there."); return; }
-  ask({title:"Save area", ok:"Save", value:"",
-    msg:"Give this " + c.nodes.length + "-part area a name. It goes on the Electronics tab, ready to drag out again.",
+  var pins = chipPins(c);
+  if (!pins.ins.length && !pins.outs.length){
+    flash("This area has no switches or lamps to make pins from — put a switch inside it for every input, a lamp for every output.");
+    return;
+  }
+  var nIns = pins.ins.length, nOuts = pins.outs.length;
+  ask({title:"Save as a chip", ok:"Save", value:"",
+    msg:"Give this chip a name. It goes on the Electronics tab as a black chip with the name on top. " +
+        (nIns === 1 ? "Its 1 switch becomes its input" : "Its " + nIns + " switches become its inputs") + " (named " +
+        (pins.pi.join(", ") || "—") + ") and " +
+        (nOuts === 1 ? "its 1 lamp its output" : "its " + nOuts + " lamps its outputs") + " (named " +
+        (pins.po.join(", ") || "—") + ").",
     check:function(v){
-      if (!v) return "Give the area a name.";
-      if (areaRead()[v]) return "There's already an area called “" + v + "” — pick another name.";
+      if (!v) return "Give the chip a name.";
+      if (areaRead()[v]) return "There's already a chip called “" + v + "” — pick another name.";
       return "";
     },
     done:function(v){
       var o = areaRead();
       o[v] = {at:Date.now(), clip:c};
       if (!areaWrite(o)){ flash("Couldn't save — this browser's storage is full or blocked."); return; }
+      areaKey(v, o[v]);
       showShelf();
-      flash("Saved “" + v + "” on the Electronics tab");
+      flash("Saved the chip “" + v + "” on the Electronics tab");
     }});
 }
 function askDeleteArea(name){
-  ask({title:"Delete area", ok:"Delete", danger:true,
-    msg:"Delete the saved area “" + name + "”? Copies already on the sheet stay.",
+  ask({title:"Delete chip", ok:"Delete", danger:true,
+    msg:"Delete the saved chip “" + name + "”? Copies already on the sheet stay.",
     done:function(){
       var o = areaRead(); delete o[name]; areaWrite(o);
       buildRail();
       flash("Deleted “" + name + "”");
     }});
 }
-/* Pick a saved area off the shelf: a copy lands under the pointer and rides with
-   it, the same as a part dragged out of the console. */
+/* Pick a saved chip off the shelf: one lands under the pointer and rides with it,
+   the same as a part dragged out of the console. */
 function spawnArea(name, e){
-  var a = areaRead()[name], keep = clip, p, n;
-  if (testMode || !a || !a.clip || !a.clip.nodes || !a.clip.nodes.length) return;
+  var key = areaKey(name), p, d, n;
+  if (testMode || !key) return;
   setWireMode(false);
   if (pasteMode) setPasteMode(false);
-  p = toWorld(e);
-  clip = a.clip;
-  pasteClip({x:p.x - a.clip.w / 2, y:p.y - a.clip.h / 2});
-  clip = keep; markTool();
-  n = pickNodes()[0];
-  if (!n) return;
-  drag = {id:n.id, off:dragSet(p, n, true), moved:true, spawn:true};
+  p = toWorld(e); d = TYPES[key];
+  n = addNode(key, p.x - d.w / 2, p.y - d.h / 2);
+  pickOne("n", n.id);
+  drag = {id:n.id, off:[{o:n, dx:d.w / 2, dy:d.h / 2}], moved:true, spawn:true};
   evaluate(); draw();
 }
 

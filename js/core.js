@@ -140,9 +140,8 @@ var CATS = [
    which inputs may be left open — a name ending "=0" or "=1" says what an open
    pin reads as — are worked out once, from the pin names. */
 var PITCH = 16, TITLE = 14, PINCH = 5.6;
-Object.keys(TYPES).forEach(function(t){
-  var d = TYPES[t], li = 0, lo = 0, rows;
-  if (d.k !== "chip") return;
+function defineChip(d){
+  var li = 0, lo = 0, rows;
   d.pd = []; d.pn = [];
   d.pi.forEach(function(s, i){
     var m = /=([01])$/.exec(s);
@@ -159,7 +158,69 @@ Object.keys(TYPES).forEach(function(t){
                            Math.ceil(((li + lo) * PINCH + 16 + (d.mid || 10)) / 4) * 4);
   /* the middle of the clear lid between the two columns of pin names */
   d.cx = (4 + li * PINCH + d.w - 4 - lo * PINCH) / 2;
-});
+}
+Object.keys(TYPES).forEach(function(t){ if (TYPES[t].k === "chip") defineChip(TYPES[t]); });
+
+/* ---------- chips you made yourself ----------
+   A saved area is a part like any other. Its switches and buttons are its
+   inputs, its lamps are its outputs, each pin is named after the part it came
+   from, and the pins run top to bottom as the parts stood in the area. The
+   circuit inside is kept with the type, and js/sim.js runs it. A type is named
+   after the area and a fingerprint of what is in it, so two areas with one name
+   but different insides are two different parts, and a build that uses one
+   carries its insides along (see snapshot in js/builds.js). */
+function chipHash(s){
+  var h = 5381, i;
+  for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+/* the pins of a clip: which of its parts are inputs and which are outputs, in the
+   order they stand, with a name for each that no other pin has */
+function chipPins(clip){
+  var ins = [], outs = [], i, n;
+  for (i = 0; i < clip.nodes.length; i++){
+    n = clip.nodes[i];
+    if (n.t === "SWITCH" || n.t === "BUTTON") ins.push(i);
+    else if (n.t === "LAMP") outs.push(i);
+  }
+  var order = function(a, b){
+    return clip.nodes[a].y - clip.nodes[b].y || clip.nodes[a].x - clip.nodes[b].x || a - b;
+  };
+  ins.sort(order); outs.sort(order);
+  var name = function(list, fallback){
+    var seen = {}, out = [];
+    list.forEach(function(ix, k){
+      var base = String(clip.nodes[ix].l || "").replace(/[s=~]+/g, "").slice(0, 8) || fallback(k), nm = base, c = 2;
+      while (seen[nm]) nm = base + (c++);
+      seen[nm] = 1; out.push(nm);
+    });
+    return out;
+  };
+  return {ins:ins, outs:outs,
+    pi:name(ins, function(k){ return k < 26 ? String.fromCharCode(65 + k) : "I" + k; }),
+    po:name(outs, function(k){ return "Q" + (k + 1); })};
+}
+function chipKey(name, clip){
+  return "U:" + name + "#" + chipHash(JSON.stringify([clip.nodes.map(function(n){ return [n.t, n.x, n.y, n.l, n.s]; }),
+    clip.wires.map(function(w){ return [w.a, w.q, w.b, w.p]; })]));
+}
+/* Make the type for a saved area and return its key; a key made before is reused. */
+function defineUserChip(name, clip){
+  var key = chipKey(name, clip), p, d, li = 0, lo = 0, nameW;
+  if (TYPES[key]) return key;
+  p = chipPins(clip);
+  p.pi.forEach(function(s){ li = Math.max(li, s.length); });
+  p.po.forEach(function(s){ lo = Math.max(lo, s.length); });
+  nameW = Math.ceil(name.length * 7.2 + 14);
+  d = TYPES[key] = {n:name, k:"chip", user:1, ab:name, clip:clip, inIx:p.ins, outIx:p.outs,
+    pi:p.pi.map(function(s){ return s + "=0"; }), po:p.po,
+    tip:name + " — a chip you made: " + p.pi.length + " input" + (p.pi.length === 1 ? "" : "s") + ", " +
+        p.po.length + " output" + (p.po.length === 1 ? "" : "s")};
+  /* wide enough for the name on the lid as well as the pin names either side */
+  d.w = Math.max(72, nameW + 16, Math.ceil(((li + lo) * PINCH + 26) / 4) * 4);
+  defineChip(d);
+  return key;
+}
 
 var nodes = [], wires = [], seq = 1, pan = {x:0,y:0};
 var byId = new Map(), drag = null, wiring = null, panning = null, cascade = 0;

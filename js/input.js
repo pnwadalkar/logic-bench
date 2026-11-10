@@ -221,6 +221,12 @@ window.addEventListener("pointermove", function(e){
   pan.y = panning.py + (e.clientY - panning.y);
   draw();
 });
+/* While something is being dragged, a touch must belong to the drag alone: left
+   to the browser it can pull the page down to refresh or slide the address bar,
+   and the viewport shrinks under the finger mid-drag. */
+document.addEventListener("touchmove", function(e){
+  if (drag || wiring || wend || marq || panning) e.preventDefault();
+}, {passive:false});
 /* Where the pointer is resting, so a paste can land under it. */
 cv.addEventListener("pointermove", function(e){ hover = toWorld(e); if (pasteMode) draw(); });
 cv.addEventListener("pointerleave", function(){ hover = null; if (pasteMode) draw(); });

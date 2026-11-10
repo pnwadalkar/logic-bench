@@ -44,18 +44,22 @@
       blank sheet is left between them, so a run that was just made straight stays
       straight while the drawing gets shorter.
 
-   6. Elbows. Every promise that had to be refused is squared off instead: level
-      out of the output, down a lane in the gap before the target column, level
-      into the input. Runs leaving one output share the lane, the way a branch is
-      drawn by hand.
+   6. Routing. Every promise that had to be refused, and every level run that would
+      pass straight through a part, is drawn the way it would be by hand: level out
+      of the output, along a lane beside the column, over a clear channel if it has
+      far to go, down a lane in front of the target column, level into the input.
+      Each net gets a lane of its own and the gaps are widened to hold them, so
+      two nets are never drawn on top of one another and no wire hides behind a part.
 
    So nothing is left on a slant, nothing had to be stacked to get there, and the
    whole thing ends up in a fraction of the space. */
-var COLGAP = GRID;         /* clear air between one column of parts and the next */
-var ROWGAP = GRID / 2;     /* clear air between two parts stacked in one column */
-var ROOM = 6;              /* the least air two part boxes may be pushed to */
+/* Roomy on purpose: the point of the cleaner is a drawing you can follow with a
+   finger, so a wire's route is never squeezed in between its neighbours. */
+var COLGAP = GRID * 2;     /* clear air between one column of parts and the next */
+var ROWGAP = GRID;         /* clear air between two parts stacked in one column */
+var ROOM = SNAP;           /* the least air two part boxes may be pushed to */
 var LEAN = 1;              /* a slant under a pixel is not worth a corner */
-var LANE = SNAP;           /* how wide a turning lane is, in the gap before a column */
+var LANE = GRID;           /* the width of one lane, in the gap beside a column */
 
 /* 1. A corner with one driver behind it hands that driver's level straight on, so
       it is spliced out and whatever it fed is hung on the driver instead. Chains
@@ -559,142 +563,260 @@ function pullEnds(){
     }
   }
 }
-/* Which runs did not come out level on the sheet that is being kept. A pass can
-   only report the promises it refused, and the sheet it refused them on is not
-   quite the sheet that ends up kept — it is refused halfway through a round,
-   before the parts are pushed apart, the inputs dealt their order back and the
-   rows squeezed up. What needs squaring off is not what some pass refused: it is
-   whatever is left on a slant, which the sheet itself can be asked. Asking it
-   here also means the answer depends on the kept sheet alone, so the corners come
-   out the same on every press. A run between two junctions that is standing up on
-   purpose is a branch, not a slant, and is left alone. */
-function skewRuns(){
-  var out = [], i, e;
-  for (i = 0; i < wires.length; i++){
-    e = ends(wires[i]);
-    if (!e || !e.a || !e.b) continue;
-    if (runAxis(e) !== "y") continue;
-    if (Math.abs(e.pb.y - e.pa.y) <= LEAN) continue;
-    out.push(wires[i]);
-  }
-  return out;
+/* 6. Routing. Every run that could not be made level, and every level run that would
+      cut straight through a part on its way, is drawn the way it would be by hand:
+      level out of the output, along a lane in the gap just after the output's column,
+      up or down to a clear channel, along the channel past whatever is in the way,
+      down a lane in the gap just before the target's column, level into the input.
+      A run into the very next column needs no channel: one lane, between the two.
+
+      Two rules keep it readable, and they are what the pass is built around:
+        - one net, one lane. Two different nets never share a lane, nor a channel
+          height where they would lie on top of each other, because a wire drawn
+          over another one reads as a short;
+        - a gap is made as wide as the lanes in it need. The pass counts the nets
+          that turn in each gap, and if the layout left less room than that the
+          columns on the right are slid across to make it — only sideways, so every
+          level run stays level.
+
+      Nothing here depends on the order the wires sit in the list: that order is
+      reshuffled whenever a corner is dissolved, so everything is sorted by place
+      and by id, and a second press lays down the same drawing. */
+function ride(pa, pb, b){
+  /* does the straight run pa-pb, level, go through this box? */
+  var pad = 3, x1 = Math.min(pa.x, pb.x), x2 = Math.max(pa.x, pb.x);
+  return pa.y > b.y - pad && pa.y < b.y + b.h + pad && x2 > b.x && x1 < b.x + b.w;
 }
-/* Square off the runs the rows refused: level out of the output, down a column at a
-   junction, level into the input. Everything leaving one output shares the column,
-   so a fan-out reads as one trunk with a branch off it rather than two slants. */
-/* Is a turning lane at this x, running between these two heights, clear of every
-   part on the sheet? A corner dot standing on a gate, or a run drawn straight
-   through one, reads as a short rather than as a turn. Junctions are not asked
-   about: a lane is made of them, and two of them near each other hides nothing. */
-function laneFree(x, lo, hi){
-  var i, n, b;
+function blockedRun(e){
+  var i, n;
+  if (Math.abs(e.pb.y - e.pa.y) > LEAN) return false;
   for (i = 0; i < nodes.length; i++){
     n = nodes[i];
-    if (isPt(n)) continue;
-    b = box(n);
-    if (x > b.x - PTR && x < b.x + b.w + PTR && hi > b.y - PTR && lo < b.y + b.h + PTR) return false;
+    if (n === e.a || n === e.b) continue;
+    if (ride(e.pa, e.pb, box(n))) return true;
   }
-  return true;
+  return false;
 }
-function elbows(bad){
-  var byOut = new Map(), i, e, k, made = 0, groups = [], taken = {};
-  for (i = 0; i < bad.length; i++){
-    e = ends(bad[i]);
+function bandEdges(g){
+  var lo = Infinity, hi = -Infinity, j, b;
+  for (j = 0; j < g.length; j++){ b = box(g[j]); lo = Math.min(lo, b.x); hi = Math.max(hi, b.x + b.w); }
+  return {lo:lo, hi:hi};
+}
+function route(){
+  var col = colOf(), bands = colBands(col), nb = bands.length, bandOf = new Map();
+  var jobs = [], jobSet = new Set(), used = [], made = 0, i, j, k, w, e, g, it, d;
+  bands.forEach(function(gr, bi){ gr.forEach(function(nd){ bandOf.set(nd.id, bi); }); });
+
+  /* which runs need routing */
+  for (i = 0; i < wires.length; i++){
+    w = wires[i]; e = ends(w);
     if (!e || !e.a || !e.b) continue;
-    if (Math.abs(e.pb.y - e.pa.y) <= LEAN) continue;     /* it came out straight anyway */
-    k = e.a.id + "." + (e.w.q | 0);          /* one trunk per output, not per part */
-    if (!byOut.has(k)) byOut.set(k, []);
-    byOut.get(k).push(e);
+    if (runAxis(e) !== "y") continue;           /* a branch standing up between corners is left alone */
+    if (Math.abs(e.pb.y - e.pa.y) > LEAN || blockedRun(e)) jobSet.add(w);
   }
-  /* Lanes are handed out by where the runs are on the sheet, never by the order
-     the wires happen to sit in the list: that order is shuffled every time a
-     corner is dissolved and redrawn, and lanes that moved with it would redraw
-     a sheet that was already clean. Each group's own runs are ordered top-down
-     for the same reason. */
-  byOut.forEach(function(g){
-    var near = Infinity, j;
-    for (j = 0; j < g.length; j++) near = Math.min(near, g[j].pb.x);
-    g.sort(function(p, q){
-      return p.pb.y - q.pb.y || p.pb.x - q.pb.x ||
-             (p.w.b < q.w.b ? -1 : p.w.b > q.w.b ? 1 : 0) || (p.w.p | 0) - (q.w.p | 0);
+  if (!jobSet.size) return 0;
+  wires.forEach(function(wr){
+    if (!jobSet.has(wr)) return;
+    var ee = ends(wr), ca = bandOf.get(wr.a), cb = bandOf.get(wr.b);
+    jobs.push({w:wr, net:wr.a + "." + (wr.q | 0), ca:ca, cb:cb, adj:cb === ca + 1, y0:ee.pa.y, y1:ee.pb.y});
+  });
+
+  /* The lanes each gap needs: the nets that depart through it and the nets that
+     arrive through it, one lane per net. Gap g lies to the right of column g. */
+  var snapUp = function(v){ return Math.ceil(v / SNAP) * SNAP; };
+  var snapDn = function(v){ return Math.floor(v / SNAP) * SNAP; };
+  var split = {};            /* "gap|net": this net leaves and arrives through the gap on lanes of its own */
+  var keyOf = function(gap, net, kind){ return split[gap + "|" + net] ? net + (kind === "dep" ? "|d" : "|a") : net; };
+  /* Two pins a fraction of a pixel apart draw as one line, so rows count as the same row
+     when they lie within a pixel of each other, not only when they are equal to the digit. */
+  var row = new Map();
+  (function(){
+    var ys = [], last = null, cur = null;
+    jobs.forEach(function(jb){ ys.push(jb.y0, jb.y1); });
+    ys.sort(function(p, q){ return p - q; });
+    ys.forEach(function(y){
+      if (last === null || y - last > 1) cur = Math.round(y);
+      row.set(y, cur); last = y;
     });
-    groups.push({g:g, near:Math.round(near), y:g[0].pa.y, x:g[0].pa.x, src:g[0].w.a + "." + (g[0].w.q | 0)});
-  });
-  /* The last word is the output's own id. Everything before it can tie — a sheet
-     is full of parts at matching heights — and what settles a tie otherwise is
-     the order the runs sit in the wire list, which pass 1 rebuilds every time it
-     splices a corner out. A press would then build the same drawing by a
-     different route, and a sheet that was already clean would come back with its
-     corners renumbered. */
-  groups.sort(function(p, q){
-    return p.near - q.near || p.y - q.y || p.x - q.x ||
-           (p.src < q.src ? -1 : p.src > q.src ? 1 : 0);
-  });
-  /* A lane is counted against the column it turns into, not against the sheet:
-     two turns in front of two different columns are nowhere near each other and
-     have no business pushing each other sideways. layoutX is told how many each
-     column came to need, and reserves that gap on the next round. */
-  var lanes = {};
-  groups.forEach(function(it){
-    var g = it.g;
-    var src = g[0].w.a, sq = g[0].w.q | 0, pa = g[0].pa, near = it.near, lane, col, trunk, p2, i, lo, hi, try2;
-    lane = lanes[near] = (lanes[near] || 0) + 1;
-    /* The turn is made in the blank gap in front of the column being fed, a lane
-       further back for each further output that has to turn. Two trunks on one
-       lane would stand two junctions of different nets a few pixels apart, which
-       reads as a short. The lane stops short of the nearest input, so the run
-       never doubles back on itself. */
-    col = Math.round((near - lane * LANE) / SNAP) * SNAP;
-    col = Math.max(pa.x + SNAP, Math.min(col, near - SNAP));
-    /* and if that lane is not clear air, it is stepped back towards the output
-       until it is: through the gap in front of an earlier column if need be,
-       which only means the run turns sooner. A lane another trunk has already
-       taken is stepped over too. Nowhere clear to stand — a crowded sheet, or a
-       target in the very next column — and the turn is made where it has to be. */
-    lo = pa.y; hi = pa.y;
-    for (i = 0; i < g.length; i++){ lo = Math.min(lo, g[i].pb.y); hi = Math.max(hi, g[i].pb.y); }
-    try2 = col;
-    for (i = 0; i < 24 && try2 - SNAP > pa.x; i++){
-      if (!taken[try2] && laneFree(try2, lo, hi)){ col = try2; break; }
-      try2 -= SNAP;
+  })();
+  var plan = function(){
+    var need = {};
+    var want = function(gap, key, anchor, kind, y){
+      if (!need[gap]) need[gap] = {};
+      var t = need[gap][key] || (need[gap][key] = {y:anchor, dep:{}, arr:{}});
+      if (anchor < t.y) t.y = anchor;
+      t[kind][row.get(y)] = 1;
+    };
+    jobs.forEach(function(jb){
+      var ag = jb.adj ? jb.ca : jb.cb - 1;
+      want(jb.ca, keyOf(jb.ca, jb.net, "dep"), jb.y0, "dep", jb.y0);
+      want(ag, keyOf(ag, jb.net, "arr"), jb.y0, "arr", jb.y1);
+    });
+    return need;
+  };
+  /* The order of the lanes in one gap, left to right. A net that leaves a part
+     runs level from it out to its lane; a net that arrives runs level from its
+     lane to the part. So the nets that only leave stand leftmost, the ones that
+     only arrive rightmost, and a net that does both is in between. And if one net
+     leaves on a row where another arrives, the arriving lane has to stand to the
+     right, or the two level stretches would lie on one line and read as one wire.
+     Two nets that each leave on the row the other arrives on cannot both be
+     satisfied by any order: those come back in `stuck`, to be given a lane for
+     leaving and another for arriving. */
+  var arrange = function(info){
+    var rank = function(k){ var a = Object.keys(info[k].arr).length, d = Object.keys(info[k].dep).length; return a ? (d ? 1 : 2) : 0; };
+    var base = Object.keys(info).sort(function(p, q){
+      return rank(p) - rank(q) || info[p].y - info[q].y || (p < q ? -1 : p > q ? 1 : 0);
+    });
+    var after = {}, indeg = {}, order = [], stuck = [], left = base.slice(), pick, a, b, y;
+    base.forEach(function(n){ after[n] = []; indeg[n] = 0; });
+    base.forEach(function(nn){
+      base.forEach(function(mm){
+        if (nn === mm) return;
+        for (y in info[nn].dep) if (info[mm].arr[y]){ after[nn].push(mm); indeg[mm]++; break; }
+      });
+    });
+    while (left.length){
+      pick = -1;
+      for (a = 0; a < left.length; a++) if (!indeg[left[a]]){ pick = a; break; }
+      if (pick < 0){ stuck = stuck.concat(left); pick = 0; }
+      b = left.splice(pick, 1)[0];
+      order.push(b);
+      after[b].forEach(function(mm){ indeg[mm]--; });
     }
-    taken[col] = 1;
-    trunk = addNode("POINT", col, pa.y);
-    wires.push({id:newId("w"), a:src, q:sq, b:trunk.id, p:0, fa:null, fb:null});
-    for (i = 0; i < g.length; i++){
-      p2 = addNode("POINT", col, g[i].pb.y);
-      wires.push({id:newId("w"), a:trunk.id, q:0, b:p2.id, p:0, fa:null, fb:null});
-      g[i].w.a = p2.id; g[i].w.q = 0; g[i].w.fa = null;
-      made++;
+    return {order:order, stuck:stuck};
+  };
+  var need, ar, it, grew;
+  for (it = 0; it < 8; it++){
+    need = plan(); ar = {}; grew = 0;
+    Object.keys(need).forEach(function(gp){
+      ar[gp] = arrange(need[gp]);
+      ar[gp].stuck.forEach(function(key){
+        if (/\|[da]$/.test(key) || split[gp + "|" + key]) return;
+        split[gp + "|" + key] = 1; grew++;
+      });
+    });
+    if (!grew) break;
+  }
+  var count = function(gap){ return need[gap] ? Object.keys(need[gap]).length : 0; };
+
+  /* make each gap wide enough, left to right, sliding everything to its right */
+  for (g = 0; g < nb - 1; g++){
+    k = count(g);
+    if (!k) continue;
+    var L = bandEdges(bands[g]), R = bandEdges(bands[g + 1]);
+    var last = snapUp(L.hi + SNAP) + (k - 1) * LANE;
+    d = last + SNAP - R.lo;
+    if (d <= 0) continue;
+    d = snapUp(d);
+    for (j = g + 1; j < nb; j++) bands[j].forEach(function(nd){ nd.x += d; });
+    for (j = 0; j < wires.length; j++){
+      if (wires[j].fa && wires[j].fa.x >= R.lo) wires[j].fa.x += d;
+      if (wires[j].fb && wires[j].fb.x >= R.lo) wires[j].fb.x += d;
     }
+  }
+  pullEnds();
+
+  /* hand the lanes out in that order */
+  var laneX = {};
+  Object.keys(need).map(Number).forEach(function(gap){
+    var nets = ar[gap].order.slice(), x0, dir;
+    if (gap < 0){ x0 = snapDn(bandEdges(bands[0]).lo - SNAP); dir = -1; nets.reverse(); }   /* the far-left gap is laid out leftwards */
+    else { x0 = snapUp(bandEdges(bands[gap]).hi + SNAP); dir = 1; }
+    laneX[gap] = {};
+    nets.forEach(function(net, ix){ laneX[gap][net] = x0 + dir * ix * LANE; });
+  });
+
+  /* heights already spoken for: every run left level, with the span it covers */
+  for (i = 0; i < wires.length; i++){
+    w = wires[i];
+    if (jobSet.has(w)) continue;
+    e = ends(w);
+    if (!e || !e.a || !e.b || Math.abs(e.pb.y - e.pa.y) > LEAN) continue;
+    used.push({y:e.pa.y, x1:Math.min(e.pa.x, e.pb.x), x2:Math.max(e.pa.x, e.pb.x), net:w.a + "." + (w.q | 0)});
+  }
+  var clash = function(y, x1, x2, net){
+    for (var u = 0; u < used.length; u++){
+      if (used[u].net === net) continue;
+      if (Math.abs(used[u].y - y) < 1 && Math.min(x2, used[u].x2) - Math.max(x1, used[u].x1) > 1) return true;
+    }
+    return false;
+  };
+  /* a channel height, level across the span of columns the run goes over, clear of
+     every part in them and of every other net's wire; the nearest one wins */
+  var channel = function(jb, x1, x2, pa, pb){
+    var lo = Math.min(jb.ca, jb.cb), hi = Math.max(jb.ca, jb.cb), iv = [], c = [], t, m, y, q;
+    for (t = lo; t <= hi; t++)
+      for (m = 0; m < bands[t].length; m++){
+        q = box(bands[t][m]); iv.push([q.y - PTR, q.y + q.h + PTR]);
+      }
+    iv.sort(function(p, r){ return p[0] - r[0]; });
+    var mg = [];
+    iv.forEach(function(v){
+      if (mg.length && v[0] <= mg[mg.length - 1][1]) mg[mg.length - 1][1] = Math.max(mg[mg.length - 1][1], v[1]);
+      else mg.push([v[0], v[1]]);
+    });
+    for (t = 0; t + 1 < mg.length; t++)
+      for (y = snapUp(mg[t][1] + 1); y < mg[t + 1][0]; y += SNAP) c.push(y);
+    for (t = 0; t < 60; t++){
+      c.push(snapDn(mg[0][0] - 1) - t * SNAP);
+      c.push(snapUp(mg[mg.length - 1][1] + 1) + t * SNAP);
+    }
+    c.sort(function(p, r){
+      return (Math.abs(p - pa.y) + Math.abs(p - pb.y)) - (Math.abs(r - pa.y) + Math.abs(r - pb.y)) || p - r;
+    });
+    for (t = 0; t < c.length; t++) if (!clash(c[t], x1, x2, jb.net)) return c[t];
+    return c[c.length - 1];
+  };
+
+  /* draw them: strict order by place and id, one chain of corners per run, shared
+     where two runs of one net go the same way */
+  jobs.sort(function(p, q){
+    return p.y0 - q.y0 || (p.net < q.net ? -1 : p.net > q.net ? 1 : 0) ||
+           ends(p.w).pb.y - ends(q.w).pb.y || ends(p.w).pb.x - ends(q.w).pb.x ||
+           (p.w.b < q.w.b ? -1 : p.w.b > q.w.b ? 1 : 0) || (p.w.p | 0) - (q.w.p | 0);
+  });
+  /* Every run's two level stubs — out of its part to its lane, and from its lane into the
+     part it feeds — are heights spoken for too, before any channel is chosen. Otherwise
+     a channel picked for one net can land on the very row another net leaves or arrives
+     on, and the two read as one wire. */
+  jobs.forEach(function(jb){
+    var ee = ends(jb.w), pa = ee.pa, pb = ee.pb;
+    var ag = jb.adj ? jb.ca : jb.cb - 1, xd = laneX[jb.ca][keyOf(jb.ca, jb.net, "dep")], xa = laneX[ag][keyOf(ag, jb.net, "arr")];
+    if (xd === undefined || xa === undefined) return;
+    used.push({y:pa.y, x1:Math.min(pa.x, xd), x2:Math.max(pa.x, xd), net:jb.net});
+    used.push({y:pb.y, x1:Math.min(xa, pb.x), x2:Math.max(xa, pb.x), net:jb.net});
+  });
+  var cache = {};
+  var chain = function(jb, pts){
+    var prev = {id:jb.w.a, q:jb.w.q | 0}, nd, key, s;
+    for (s = 0; s < pts.length; s++){
+      key = jb.net + "|" + pts[s][0] + "|" + pts[s][1];
+      nd = cache[key];
+      if (!nd){
+        nd = addNode("POINT", pts[s][0], pts[s][1]);
+        wires.push({id:newId("w"), a:prev.id, q:prev.q, b:nd.id, p:0, fa:null, fb:null});
+        cache[key] = nd; made++;
+      }
+      prev = {id:nd.id, q:0};
+    }
+    jb.w.a = prev.id; jb.w.q = 0; jb.w.fa = null;
+  };
+  jobs.forEach(function(jb){
+    var ee = ends(jb.w), pa = ee.pa, pb = ee.pb, xd, xa, yc, pts;
+    var ag = jb.adj ? jb.ca : jb.cb - 1, dk = keyOf(jb.ca, jb.net, "dep"), ak = keyOf(ag, jb.net, "arr");
+    xd = laneX[jb.ca][dk];
+    if (jb.adj && dk === ak){                       /* the next column over: one lane does it */
+      chain(jb, [[xd, pa.y], [xd, pb.y]]);
+      return;
+    }
+    xa = laneX[ag][ak];
+    yc = channel(jb, Math.min(xd, xa), Math.max(xd, xa), pa, pb);
+    used.push({y:yc, x1:Math.min(xd, xa), x2:Math.max(xd, xa), net:jb.net});
+    pts = [[xd, pa.y], [xd, yc], [xa, yc], [xa, pb.y]];
+    chain(jb, pts.filter(function(p, ix){ return !ix || p[0] !== pts[ix - 1][0] || p[1] !== pts[ix - 1][1]; }));
   });
   return made;
-}
-/* Room for the corners a column is going to need, read off the wiring before any
-   of it is laid out. A part with one input is fed by one run and that run can
-   always be made level, so a column of those needs no turning room at all and is
-   set down tight against the one before it. A part with two or more inputs can
-   only be level with one of them, so the rest have to turn in the gap in front
-   of its column, and that gap is given lanes to turn in.
-
-   Reading this off the wiring rather than off the last round's refusals is what
-   keeps it honest: the layout stays a plain function of the circuit, so the
-   rounds still settle and a second press still changes nothing. */
-function laneRoom(bands){
-  var extra = {}, i, j, g, ins, k, w, most;
-  for (i = 1; i < bands.length; i++){
-    g = bands[i]; most = 0;
-    for (j = 0; j < g.length; j++){
-      ins = 0;
-      for (k = 0; k < wires.length; k++){
-        w = wires[k];
-        if (w.b === g[j].id && w.a) ins++;
-      }
-      if (ins > most) most = ins;
-    }
-    if (most > 1) extra[i] = Math.min(most - 1, 3) * LANE;
-  }
-  return extra;
 }
 function bounds(){
   var i, w, n, b, r = null, add = function(x, y, x2, y2){
@@ -868,6 +990,18 @@ function playSteps(steps){
   play = {s:steps, i:1, raf:0};
   playStage();
 }
+/* Wires attached to nothing, put back level (or plumb, whichever they leant towards)
+   in a row beneath everything else, in the order they were drawn. */
+function layOrphans(list){
+  var r = bounds(), x = r ? r.x : 0, y = r ? r.y2 + 60 : 0, i, w, dx, dy;
+  for (i = 0; i < list.length; i++){
+    w = list[i]; dx = w.fb.x - w.fa.x; dy = w.fb.y - w.fa.y;
+    if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0;
+    w.fa = {x:x, y:y}; w.fb = {x:x + dx, y:y + dy};
+    y += Math.abs(dy) + 30;
+    wires.push(w);
+  }
+}
 /* The cleaner moves parts and adds corners, so it keeps the sheet it started
    from for Ctrl+Z. */
 function cleanUp(sure){
@@ -880,6 +1014,12 @@ function cleanUp(sure){
   }
   pushUndo();
   var was = area(bounds());
+  /* A wire with nothing at either end belongs to no part, so the layout has nothing
+     to hold it to. It is set aside while the parts are laid out, then squared and
+     laid in a row under the finished circuit — so it lands in the same place every
+     press instead of being carried further along each time. */
+  var orphans = wires.filter(function(w){ return !w.a && !w.b && w.fa && w.fb; });
+  if (orphans.length) wires = wires.filter(function(w){ return orphans.indexOf(w) < 0; });
   var step = stepTrack();            /* the sheet as it stands, to play back from */
   pinInputs();                       /* the order the inputs are in, before a thing has moved */
   dissolvePoints();
@@ -904,7 +1044,7 @@ function cleanUp(sure){
      order, so both run the same course and arrive at the same repeat. */
   for (i = 0; i < 20; i++){
     bands = colBands(colOf());
-    if (!room) room = laneRoom(bands);        /* the same every round: the wiring has not changed */
+    if (!room) room = {};                     /* the gaps are widened for their lanes in pass 6, once the heights are known */
     layoutX(bands, room);
     if (!i) step("Columns — one step right of what drives it, the lamps on one edge");
     stackY(bands);
@@ -928,14 +1068,15 @@ function cleanUp(sure){
   if (!best) best = bestPlace(log, 0);     /* no repeat inside the cap: the best of what was seen */
   putPlace(best);
   step("Settled — the rounds repeated until the parts stopped moving");
-  /* What has to be squared off is read straight off the kept sheet: whatever is
-     still on a slant, rather than whatever some round's pass refused halfway
-     through laying it out. */
-  var corners = elbows(skewRuns());
+  /* What has to be routed is read straight off the kept sheet: whatever is still
+     on a slant, and whatever runs level straight through a part, rather than
+     whatever some round's pass refused halfway through laying it out. */
+  var corners = route();
+  if (orphans.length) layOrphans(orphans);
   var r = bounds();
   if (r){ pan.x = 48 - r.x * zoom; pan.y = 40 - r.y * zoom; }
   clearPick(); pend = null; wiring = null; wend = null; marq = null;
-  step("Corners squared — the runs that could not be made level");
+  step("Routed — every net in its own lane, nothing drawn through a part");
   commit();
   playSteps(step.steps);
   var saved = Math.round((1 - area(r) / was) * 100);

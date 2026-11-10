@@ -29,11 +29,12 @@ function reindex(){ byId.clear(); for (var i = 0; i < nodes.length; i++) byId.se
    the way they always have. A floating input reads as 0. */
 function hi(d){ return d === 2 || d === 4 ? 1 : 0; }
 function drv(v){ return v ? 4 : 3; }
-function resolve(list){
+function resolve(list, ids){
   var k, best = 0, n, d;
   if (!list) return 0;
+  ids = ids || byId;
   for (k = 0; k < list.length; k++){
-    n = byId.get(list[k][0]);
+    n = ids.get(list[k][0]);
     d = n && n.od ? n.od[list[k][1]] | 0 : 0;
     if (d > best) best = d;
   }
@@ -152,13 +153,13 @@ function outputs(n, d){
   return [drv(logic(n.t, a))];
 }
 /* Iterative settle: bounded passes, so a feedback loop can never spin the CPU. */
-function settle(src){
+function settle(src, ns, ids){
   var i, j, n, d, o, pass, changed, k;
   for (pass = 0; pass < 64; pass++){
     changed = false;
-    for (i = 0; i < nodes.length; i++){
-      n = nodes[i]; d = [];
-      for (j = 0; j < nIn(n); j++){ d.push(resolve(src.get(n.id + ":" + j))); n.iv[j] = hi(d[j]); }
+    for (i = 0; i < ns.length; i++){
+      n = ns[i]; d = [];
+      for (j = 0; j < nIn(n); j++){ d.push(resolve(src.get(n.id + ":" + j), ids)); n.iv[j] = hi(d[j]); }
       n.idr = d;
       o = outputs(n, d);
       for (k = 0; k < o.length; k++) if (n.od[k] !== o[k]){ n.od[k] = o[k]; changed = true; }
@@ -166,18 +167,66 @@ function settle(src){
     if (!changed) break;
   }
 }
+/* ---------- chips you made ----------
+   The inside of one chip on the sheet: its own copy of the parts and wires, kept
+   on the part so a flip-flop in there goes on holding what it holds. The chip's
+   switches and buttons become junctions that its input pins feed, and its lamps
+   become junctions that its output pins read from — so inside, it is just wires. */
+function chipInside(n){
+  var t = TYPES[n.t], c = t.clip, s = n.sub, pre = n.id + "/";
+  if (s && s.key === n.t) return s;
+  s = n.sub = {key:n.t, nodes:[], wires:[], ins:[], outs:[]};
+  c.nodes.forEach(function(cn, i){
+    var pin = t.inIx.indexOf(i) >= 0 || t.outIx.indexOf(i) >= 0;
+    var nd = {id:pre + i, t:pin ? "POINT" : cn.t, x:cn.x, y:cn.y, v:0, s:cn.s | 0, l:"", iv:[]};
+    if (cn.c !== undefined) nd.c = cn.c;
+    if (cn.m !== undefined) nd.m = keepMem(cn.m);
+    s.nodes.push(nd);
+  });
+  t.inIx.forEach(function(i){ s.ins.push(pre + i); });
+  t.outIx.forEach(function(i){ s.outs.push(pre + i); });
+  c.wires.forEach(function(cw){
+    if (cw.a === null || cw.b === null) return;          /* a loose end carries nothing */
+    s.wires.push({id:pre + "w" + s.wires.length, a:pre + cw.a, q:cw.q | 0, b:pre + cw.b, p:cw.p | 0});
+  });
+  return s;
+}
+/* The sheet with every chip you made opened up into the parts it is made of, so
+   what is inside settles, and takes its clock edges, together with everything
+   else — exactly as if it had been drawn there. A chip that holds a chip is
+   opened too, a few levels down. */
+function flatten(ns, ws, depth){
+  var outN = [], outW = [], map = {}, i, n, s, r, w, a, q, b, p;
+  for (i = 0; i < ns.length; i++){
+    n = ns[i];
+    if (!TYPES[n.t].user || depth > 6){ outN.push(n); continue; }
+    s = chipInside(n);
+    r = flatten(s.nodes, s.wires, depth + 1);
+    outN = outN.concat(r.ns); outW = outW.concat(r.ws);
+    map[n.id] = s;
+  }
+  for (i = 0; i < ws.length; i++){
+    w = ws[i]; a = w.a; q = w.q | 0; b = w.b; p = w.p | 0;
+    if (!a || !b) continue;
+    if (map[a]){ a = map[a].outs[q]; q = 0; if (!a) continue; }
+    if (map[b]){ b = map[b].ins[p]; p = 0; if (!b) continue; }
+    outW.push({a:a, q:q, b:b, p:p});
+  }
+  return {ns:outN, ws:outW};
+}
 /* Settle the sheet and return how many inputs are left open. The screen is not
    touched, so the arena's checker can run a circuit that is not on the sheet. */
 function solve(){
-  var src = new Map(), i, j, n, w, s, round, fire, next, t, c;
-  for (i = 0; i < wires.length; i++){
-    w = wires[i];
-    if (!w.a || !w.b) continue;
+  var flat = flatten(nodes, wires, 0), ns = flat.ns, ws = flat.ws, ids = new Map(), src = new Map();
+  var i, j, n, w, s, round, fire, next, t, c;
+  for (i = 0; i < ns.length; i++) ids.set(ns[i].id, ns[i]);
+  for (i = 0; i < ws.length; i++){
+    w = ws[i];
     s = w.b + ":" + w.p;
     if (src.has(s)) src.get(s).push([w.a, w.q | 0]); else src.set(s, [[w.a, w.q | 0]]);
   }
-  for (i = 0; i < nodes.length; i++){
-    n = nodes[i]; n.iv = [];
+  for (i = 0; i < ns.length; i++){
+    n = ns[i]; n.iv = [];
     for (j = 0; j < nIn(n); j++) n.iv.push(0);
     if (!n.od || n.od.length !== nOut(n)) n.od = [];
   }
@@ -186,10 +235,10 @@ function solve(){
      edge however its parts happen to be ordered on the sheet. A counter whose
      outputs clock the next one ripples on through the rounds. */
   for (round = 0; round < 32; round++){
-    settle(src);
+    settle(src, ns, ids);
     fire = [];
-    for (i = 0; i < nodes.length; i++){
-      n = nodes[i]; t = TYPES[n.t];
+    for (i = 0; i < ns.length; i++){
+      n = ns[i]; t = TYPES[n.t];
       if (t.ck === undefined) continue;
       c = n.iv[t.ck];
       if (c && n.pc === 0) fire.push(n);
@@ -199,10 +248,19 @@ function solve(){
     next = fire.map(function(f){ return EDGE[f.t](f, f.ia); });
     for (i = 0; i < fire.length; i++) fire[i].m = next[i];
   }
-  for (i = 0; i < nodes.length; i++){
-    n = nodes[i];
+  for (i = 0; i < ns.length; i++){
+    n = ns[i];
     n.ov = n.od.map(hi);
     n.v = nOut(n) ? n.ov[0] : (n.iv[0] | 0);
+  }
+  /* a chip you made shows what its pins are doing: read off the junctions behind them */
+  for (i = 0; i < nodes.length; i++){
+    n = nodes[i];
+    if (!TYPES[n.t].user || !n.sub) continue;
+    n.iv = n.sub.ins.map(function(id){ var p = ids.get(id); return p ? p.iv[0] | 0 : 0; });
+    n.od = n.sub.outs.map(function(id){ var p = ids.get(id); return p && p.od ? p.od[0] | 0 : 0; });
+    n.ov = n.od.map(hi);
+    n.v = nOut(n) ? n.ov[0] : 0;
   }
   var open = 0;
   for (i = 0; i < nodes.length; i++){
