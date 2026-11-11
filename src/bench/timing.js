@@ -1,24 +1,27 @@
 /* Time on the bench: clocks tick, capacitors charge and drain, inductors catch up. */
-"use strict";
+import { S, flash } from "./state.js";
+import { TYPES } from "./core.js";
+import { draw } from "./render.js";
+import { evaluate, hi } from "./sim.js";
 
 /* ---------- time ---------- */
 /* Everything else on the sheet settles at once; these parts change with time, so
    a timer steps them every TICK and settles the sheet again when one has moved. */
-var TICK = 50;                       /* ms between steps */
-var RATES = [1, 2, 5, 10, 0.5, 0];   /* a clock's speeds in Hz, in the order a click steps through; 0 stops it */
-var CHARGE = 0.22;                   /* how far a capacitor gets towards a strong drive each step */
-var LEAK = 0.997;                    /* what a floating capacitor keeps of its charge each step */
-var CATCH = 0.14;                    /* how far an inductor's current gets towards its input each step */
-function rate(n){ return typeof n.c === "number" ? n.c : 1; }
-function rateText(r){ return r === 0 ? "stop" : r === 0.5 ? "½ Hz" : r + " Hz"; }
-function tick(){
-  if (play || document.hidden || document.querySelector("#home:not([hidden]), #arena:not([hidden]), #login:not([hidden])")) return;
+export var TICK = 50;                       /* ms between steps */
+export var RATES = [1, 2, 5, 10, 0.5, 0];   /* a clock's speeds in Hz, in the order a click steps through; 0 stops it */
+export var CHARGE = 0.22;                   /* how far a capacitor gets towards a strong drive each step */
+export var LEAK = 0.997;                    /* what a floating capacitor keeps of its charge each step */
+export var CATCH = 0.14;                    /* how far an inductor's current gets towards its input each step */
+export function rate(n){ return typeof n.c === "number" ? n.c : 1; }
+export function rateText(r){ return r === 0 ? "stop" : r === 0.5 ? "½ Hz" : r + " Hz"; }
+export function tick(){
+  if (S.play || document.hidden || S.homeOpen || S.arenaOpen || S.login) return;
   tickNow();
 }
-function tickNow(){
+export function tickNow(){
   var i, n, d, was, to, r, half, moved = false;
-  for (i = 0; i < nodes.length; i++){
-    n = nodes[i];
+  for (i = 0; i < S.nodes.length; i++){
+    n = S.nodes[i];
     if (!TYPES[n.t].tm) continue;
     if (n.t === "CLOCK"){
       r = rate(n);
@@ -41,11 +44,12 @@ function tickNow(){
   }
   if (moved){ evaluate(); draw(); }
 }
-setInterval(tick, TICK);
+/* started once, when the bench boots */
+export function startClock(){ return setInterval(tick, TICK); }
 
 /* A click on a part that is worked by hand: a switch flips, a hex input counts on,
    a clock steps to its next speed. False for any other part. */
-function tapPart(n){
+export function tapPart(n){
   if (n.t === "SWITCH") n.s = n.s ? 0 : 1;
   else if (n.t === "HEXIN") n.s = ((n.s | 0) + 1) & 15;
   else if (n.t === "QUBIT") n.s = n.s ? 0 : 1;

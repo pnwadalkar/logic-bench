@@ -1,54 +1,20 @@
 /* Headless checks for the quantum simulator and for the port-to-port wire rule.
    Usage: node tools/test-quantum.mjs
-   Loads the bench's own scripts into a vm with a stub DOM (as test-cleaner.mjs
-   does), builds quantum circuits and compares what the meters read with what
+   Loads the bench's own modules with a stub DOM (tools/bench-harness.mjs),
+   builds quantum circuits and compares what the meters read with what
    the textbook says they should. */
 import fs from "node:fs";
 import path from "node:path";
-import vm from "node:vm";
-import { fileURLToPath } from "node:url";
+import { loadBench } from "./bench-harness.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const g2d = new Proxy({}, { get: (t, k) => (k === "measureText" ? () => ({ width: 0 }) : k === "createPattern" ? () => ({}) : () => {}), set: () => true });
-const els = {};
-const el = (sel) => els[sel] || (els[sel] = {
-  textContent: "", classList: { add(){}, remove(){}, toggle(){} }, appendChild(){}, style: {}, children: [],
-  hidden: false, getContext: () => g2d, addEventListener(){}, setAttribute(){}, getAttribute(){ return null; },
-  clientWidth: 1000, clientHeight: 700, dataset: {}
-});
-const store = {};
-const flashes = [];
-const ctx = {
-  document: {
-    documentElement: { getAttribute: () => "desktop", setAttribute(){} },
-    querySelector: el, querySelectorAll: () => [],
-    createElement: () => ({ setAttribute(){}, appendChild(){}, style: {}, classList: { add(){}, remove(){}, toggle(){} },
-      getContext: () => g2d, addEventListener(){}, dataset: {} })
-  },
-  navigator: { userAgent: "" },
-  localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
-  requestAnimationFrame: () => 0, cancelAnimationFrame(){},
-  getComputedStyle: () => ({ getPropertyValue: () => "#000" }),
-  clearTimeout(){}, setTimeout: () => 0,
-  HOST: { kind(){}, quantum(){}, chooseKind(){} },
-  Auth: { key: (k) => "t." + k, changed(){}, cloud: () => false },
-  Collab: { active: () => false, peers: () => [], clock: () => 0, mergeUndo: (d) => d, drawPeers(){} },
-  console
-};
-ctx.window = ctx;
-vm.createContext(ctx);
-const run = (code) => vm.runInContext(code, ctx);
-["core.js", "shapes.js", "symbols.js", "sim.js", "quantum.js", "render.js", "edit.js", "cleaner.js", "builds.js"]
-  .forEach((f) => run(fs.readFileSync(path.join(root, "src", "engine", f), "utf8")));
-ctx.__flash = (m) => flashes.push(m);
+const run = await loadBench();
+
 run(`
-buildRail = function(){}; zoomShow = function(){}; clampZ = function(z){ return z; }; flash = function(m){ __flash(m); }; saveCur = function(){};
-leaveShared = function(){ return false; }; markTool = function(){};
 var Q = {};
-Q.reset = function(kind){ setKind(kind || "quantum"); nodes = []; wires = []; seq = 1; byId = new Map(); };
+Q.reset = function(kind){ setKind(kind || "quantum"); S.nodes = []; S.wires = []; S.seq = 1; byId.clear(); };
 Q.add = function(t, row, col){ return addNode(t, 72 + (col | 0) * 96, 96 + (row | 0) * QROW); };
 Q.wire = function(a, q, b, p){ return connect({kind:"out", id:a.id, p:q}, {kind:"in", id:b.id, p:p}); };
-Q.run = function(){ var open = qSolve(); var o = {}; QRES.rows.forEach(function(r){ o[r.b] = r.p; }); return {open:open, rows:o, res:QRES}; };
+Q.run = function(){ var open = qSolve(); var o = {}; S.QRES.rows.forEach(function(r){ o[r.b] = r.p; }); return {open:open, rows:o, res:S.QRES}; };
 /* a line of one-qubit gates from a fresh qubit to a meter */
 Q.line = function(row, start, gates){
   var q = Q.add("QUBIT", row, 0), last = q, i, g, m;
@@ -135,11 +101,11 @@ truthy("a gate with an input open does not run", Q(`Q.reset();
 truthy("a quantum output feeds one input only", Q(`Q.reset();
   var a = Q.add("QUBIT", 0, 0), m0 = Q.add("METER", 0, 1), m1 = Q.add("METER", 1, 1);
   Q.wire(a, 0, m0, 0); Q.wire(a, 0, m1, 0);
-  wires.length === 1 && wires[0].b === m1.id`));
+  S.wires.length === 1 && S.wires[0].b === m1.id`));
 truthy("a classical output still fans out", Q(`Q.reset("classical");
   var s = addNode("SWITCH", 0, 0), l0 = addNode("LAMP", 100, 0), l1 = addNode("LAMP", 100, 60);
   Q.wire(s, 0, l0, 0); Q.wire(s, 0, l1, 0);
-  wires.length === 2`));
+  S.wires.length === 2`));
 truthy("more qubits than the simulator runs: a note, no crash", Q(`Q.reset();
   for (var i = 0; i < QMAX + 1; i++) Q.line(i, 0, []);
   var r = Q.run(); r.res.note.indexOf("qubits") > 0 && r.res.rows.length === 0`));
@@ -148,14 +114,14 @@ truthy("ten qubits run", Q(`Q.reset();
   var r = Q.run(); r.res.rows.length === 16 && r.res.more === 1024 - 16 && Math.abs(r.res.rows[0].p - 1 / 1024) < 1e-12`));
 truthy("a quantum build remembers its kind", Q(`Q.reset(); Q.line(0, 0, ["QH"]);
   var d = JSON.parse(JSON.stringify(snapshot())); Q.reset("classical");
-  load(d) && docKind === "quantum" && nodes.length === 3`));
+  load(d) && S.docKind === "quantum" && S.nodes.length === 3`));
 truthy("a classical build loads as classical", Q(`Q.reset("classical"); addNode("SWITCH", 0, 0);
   var d = JSON.parse(JSON.stringify(snapshot())); Q.reset("quantum");
-  d.kind === undefined && load(d) && docKind === "classical"`));
-truthy("a copy does not cross kinds", Q(`Q.reset(); var l = Q.line(0, 0, ["QH"]); selectAll(); clip = clipFrom();
-  var c = clip; Q.reset("classical"); clip = c; pasteClip({x:0, y:0}); nodes.length === 0`));
-truthy("the Bell example reads 00 and 11", Q(`freeName = function(s){ return s; }; commit = function(){}; exampleQ();
-  var r = Q.run().rows; docKind === "quantum" && Math.abs(r["00"] - 0.5) < 1e-9 && Math.abs(r["11"] - 0.5) < 1e-9`));
+  d.kind === undefined && load(d) && S.docKind === "classical"`));
+truthy("a copy does not cross kinds", Q(`Q.reset(); var l = Q.line(0, 0, ["QH"]); selectAll(); S.clip = clipFrom();
+  var c = S.clip; Q.reset("classical"); S.clip = c; pasteClip({x:0, y:0}); S.nodes.length === 0`));
+truthy("the Bell example reads 00 and 11", Q(`exampleQ();
+  var r = Q.run().rows; S.docKind === "quantum" && Math.abs(r["00"] - 0.5) < 1e-9 && Math.abs(r["11"] - 0.5) < 1e-9`));
 
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

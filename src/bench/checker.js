@@ -2,41 +2,44 @@
    It judges three things — does it work (every input pattern), how fast (the longest
    run of gate delays from an input to an output) and how small (transistors, and wires).
    The build is run where it stands, apart from the sheet on screen. */
-"use strict";
+import { S } from "./state.js";
+import { graphOf } from "./builds.js";
+import { TYPES, byId } from "./core.js";
+import { reindex, solve } from "./sim.js";
 
 /* ---------- what a part costs ---------- */
 /* Transistors a part is made of, and gate delays it takes to pass a signal. A chip
    is priced as the gates inside it would be built, so a chip is no free lunch. */
-var COST = {
+export var COST = {
   NOT:[2,1], NAND:[4,1], NOR:[4,1], AND:[6,2], OR:[6,2], XOR:[8,3], XNOR:[8,3], BUF:[4,2], TRI:[6,2],
   RES:[1,1], DIODE:[1,1], NMOS:[1,1], PMOS:[1,1], NPN:[1,1], PNP:[1,1],
   HADD:[14,3], FADD:[28,6], ADD4:[112,12], CMP4:[56,6], ALU:[220,14],
   MUX2:[12,3], MUX4:[36,5], DEMUX4:[24,3], DEC24:[20,3], DEC38:[56,4], ENC42:[22,4]
 };
 /* wires, junctions, supplies and the challenge's own switches and lamps are free */
-var FREE = {POINT:1, SWITCH:1, LAMP:1, VCC:1, GND:1};
+export var FREE = {POINT:1, SWITCH:1, LAMP:1, VCC:1, GND:1};
 /* what a challenge may be built from: "gates" is the gates and the electronic parts, "chips"
    adds the arithmetic and routing families. Memory, clocks, capacitors and inductors depend on
    time, so a combinational challenge has no use for them; ROM would just hold the answer. */
-var GATES_OK = {AND:1, OR:1, NOT:1, NAND:1, NOR:1, XOR:1, XNOR:1, BUF:1, TRI:1,
+export var GATES_OK = {AND:1, OR:1, NOT:1, NAND:1, NOR:1, XOR:1, XNOR:1, BUF:1, TRI:1,
   RES:1, DIODE:1, NMOS:1, PMOS:1, NPN:1, PNP:1};
-var CHIPS_OK = {HADD:1, FADD:1, ADD4:1, CMP4:1, ALU:1, MUX2:1, MUX4:1, DEMUX4:1, DEC24:1, DEC38:1, ENC42:1};
+export var CHIPS_OK = {HADD:1, FADD:1, ADD4:1, CMP4:1, ALU:1, MUX2:1, MUX4:1, DEMUX4:1, DEC24:1, DEC38:1, ENC42:1};
 /* the score: lower is better */
-var W_SIZE = 1, W_SPEED = 4, W_WIRE = 0.5;
+export var W_SIZE = 1; export var W_SPEED = 4; export var W_WIRE = 0.5;
 
-function partCost(t){ return COST[t] ? COST[t][0] : 0; }
-function partDelay(t){ return COST[t] ? COST[t][1] : 0; }
+export function partCost(t){ return COST[t] ? COST[t][0] : 0; }
+export function partDelay(t){ return COST[t] ? COST[t][1] : 0; }
 
 /* Run fn with this graph standing in for the sheet, then put the sheet back. */
-function isolated(g, fn){
-  var sn = nodes, sw = wires;
-  nodes = g.nodes; wires = g.wires; reindex();
+export function isolated(g, fn){
+  var sn = S.nodes, sw = S.wires;
+  S.nodes = g.nodes; S.wires = g.wires; reindex();
   try { return fn(); }
-  finally { nodes = sn; wires = sw; reindex(); }
+  finally { S.nodes = sn; S.wires = sw; reindex(); }
 }
 
 /* the input and output ports of a graph, matched to the challenge's names */
-function matchPorts(g, ch){
+export function matchPorts(g, ch){
   var sws = g.nodes.filter(function(n){ return n.t === "SWITCH"; }),
       lps = g.nodes.filter(function(n){ return n.t === "LAMP"; });
   var byLabel = function(list, names){
@@ -65,7 +68,7 @@ function matchPorts(g, ch){
 }
 
 /* a loop means feedback — a latch, or an oscillator — and a combinational challenge has none */
-function hasLoop(g){
+export function hasLoop(g){
   var next = {}, state = {}, found = false;
   g.nodes.forEach(function(n){ next[n.id] = []; });
   g.wires.forEach(function(w){ if (w.a && w.b && next[w.a]) next[w.a].push(w.b); });
@@ -84,7 +87,7 @@ function hasLoop(g){
 }
 
 /* the longest run of gate delays from anywhere to one of these outputs */
-function longestPath(g, outs){
+export function longestPath(g, outs){
   var into = {}, memo = {};
   g.nodes.forEach(function(n){ into[n.id] = []; });
   g.wires.forEach(function(w){ if (w.a && w.b && into[w.b]) into[w.b].push(w.a); });
@@ -97,7 +100,7 @@ function longestPath(g, outs){
   return outs.reduce(function(m, n){ return Math.max(m, at(n.id)); }, 0);
 }
 
-function tally(list){
+export function tally(list){
   var c = {};
   list.forEach(function(t){ c[t] = (c[t] || 0) + 1; });
   return Object.keys(c).map(function(t){ return (c[t] > 1 ? c[t] + "× " : "") + TYPES[t].n; }).join(", ");
@@ -105,7 +108,7 @@ function tally(list){
 
 /* judge(data, challenge) → a report. ok is true only for a build that follows the
    rules and gets every input pattern right; only then are the measurements a score. */
-function judge(data, ch){
+export function judge(data, ch){
   var rep = {ok:false, errors:[], notes:[], pass:0, total:1 << ch.ins.length, miss:[]};
   var g, ports, bad, loose;
   if (!data || !Array.isArray(data.nodes) || !data.nodes.length){ rep.errors.push("The build is empty."); return rep; }

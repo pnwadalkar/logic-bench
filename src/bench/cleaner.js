@@ -1,5 +1,12 @@
 /* Cleaner looks: the passes that square a circuit up, and the panel that shows them run. */
-"use strict";
+import { S, ask, flash, notify } from "./state.js";
+import { load, snapshot } from "./builds.js";
+import { Collab } from "./collab.js";
+import { GRID, PTR, SNAP, STUB, box, byId, hasOut, inPort, isPt, nIn, newId, outPort } from "./core.js";
+import { addNode, commit, pushUndo } from "./edit.js";
+import { closeRename } from "./input.js";
+import { draw, render } from "./render.js";
+import { clearPick, evaluate, reindex } from "./sim.js";
 
 /* ---------- cleaner ---------- */
 /* Cleaner looks. Six passes, in this order, because the order is what makes it
@@ -55,27 +62,27 @@
    whole thing ends up in a fraction of the space. */
 /* Roomy on purpose: the point of the cleaner is a drawing you can follow with a
    finger, so a wire's route is never squeezed in between its neighbours. */
-var COLGAP = GRID * 2;     /* clear air between one column of parts and the next */
-var ROWGAP = GRID;         /* clear air between two parts stacked in one column */
-var ROOM = SNAP;           /* the least air two part boxes may be pushed to */
-var LEAN = 1;              /* a slant under a pixel is not worth a corner */
-var LANE = GRID;           /* the width of one lane, in the gap beside a column */
+export var COLGAP = GRID * 2;     /* clear air between one column of parts and the next */
+export var ROWGAP = GRID;         /* clear air between two parts stacked in one column */
+export var ROOM = SNAP;           /* the least air two part boxes may be pushed to */
+export var LEAN = 1;              /* a slant under a pixel is not worth a corner */
+export var LANE = GRID;           /* the width of one lane, in the gap beside a column */
 
 /* 1. A corner with one driver behind it hands that driver's level straight on, so
       it is spliced out and whatever it fed is hung on the driver instead. Chains
       of them dissolve one link per sweep, so the sweeps repeat until the sheet
       stops changing. */
-function dissolvePoints(){
+export function dissolvePoints(){
   var gone = 0, pass, k;
   var sweep = function(){
     var i, j, n, ins, outs, cut = 0, seen = {}, ok;
-    for (i = nodes.length - 1; i >= 0; i--){
-      n = nodes[i];
+    for (i = S.nodes.length - 1; i >= 0; i--){
+      n = S.nodes[i];
       if (!isPt(n) || n.l) continue;                /* a corner you named is yours */
       ins = []; outs = [];
-      for (j = 0; j < wires.length; j++){
-        if (wires[j].b === n.id) ins.push(wires[j]);
-        if (wires[j].a === n.id) outs.push(wires[j]);
+      for (j = 0; j < S.wires.length; j++){
+        if (S.wires[j].b === n.id) ins.push(S.wires[j]);
+        if (S.wires[j].a === n.id) outs.push(S.wires[j]);
       }
       /* several drivers meeting at one dot is a net, not geometry: it stays */
       if (ins.length !== 1 || !ins[0].a || !outs.length) continue;
@@ -84,13 +91,13 @@ function dissolvePoints(){
         if (!outs[j].b || outs[j].b === ins[0].a) ok = false;  /* loose end, or self-wiring */
       if (!ok) continue;
       for (j = 0; j < outs.length; j++){ outs[j].a = ins[0].a; outs[j].q = ins[0].q | 0; }
-      wires.splice(wires.indexOf(ins[0]), 1);
-      nodes.splice(i, 1);
+      S.wires.splice(S.wires.indexOf(ins[0]), 1);
+      S.nodes.splice(i, 1);
       cut++;
     }
     if (!cut) return 0;
     /* the splice can leave two identical wires on one input; one of them is enough */
-    wires = wires.filter(function(w){
+    S.wires = S.wires.filter(function(w){
       if (!w.a || !w.b) return true;
       var key = w.a + "." + (w.q | 0) + ">" + w.b + ":" + w.p;
       if (seen[key]) return false;
@@ -109,13 +116,13 @@ function dissolvePoints(){
 
 /* 2. Which column each part belongs in. Bounded passes, so a feedback loop
       settles on a number instead of spinning the CPU. */
-function colOf(){
+export function colOf(){
   var col = new Map(), i, k, w, ca, cb, changed, last;
-  for (i = 0; i < nodes.length; i++) col.set(nodes[i].id, 0);
-  for (k = 0; k <= nodes.length; k++){
+  for (i = 0; i < S.nodes.length; i++) col.set(S.nodes[i].id, 0);
+  for (k = 0; k <= S.nodes.length; k++){
     changed = false;
-    for (i = 0; i < wires.length; i++){
-      w = wires[i];
+    for (i = 0; i < S.wires.length; i++){
+      w = S.wires[i];
       if (!w.a || !w.b) continue;
       ca = col.get(w.a); cb = col.get(w.b);
       if (ca === undefined || cb === undefined) continue;
@@ -132,19 +139,19 @@ function colOf(){
      on level until it gets there, and every answer is read off one edge. The
      displays are readouts too — anything with no output is — and go with them. */
   last = -1;
-  for (i = 0; i < nodes.length; i++)
-    if (hasOut(nodes[i])) last = Math.max(last, col.get(nodes[i].id));
-  for (i = 0; i < nodes.length; i++)
-    if (!hasOut(nodes[i])) col.set(nodes[i].id, last + 1);
+  for (i = 0; i < S.nodes.length; i++)
+    if (hasOut(S.nodes[i])) last = Math.max(last, col.get(S.nodes[i].id));
+  for (i = 0; i < S.nodes.length; i++)
+    if (!hasOut(S.nodes[i])) col.set(S.nodes[i].id, last + 1);
   return col;
 }
 /* The parts of each column, left to right. */
-function colBands(col){
+export function colBands(col){
   var g = new Map(), i, c, keys;
-  for (i = 0; i < nodes.length; i++){
-    c = col.get(nodes[i].id) || 0;
+  for (i = 0; i < S.nodes.length; i++){
+    c = col.get(S.nodes[i].id) || 0;
     if (!g.has(c)) g.set(c, []);
-    g.get(c).push(nodes[i]);
+    g.get(c).push(S.nodes[i]);
   }
   keys = [];
   g.forEach(function(v, k){ keys.push(k); });
@@ -173,8 +180,8 @@ function colBands(col){
    square a different corner and land somewhere else: exactly what pass 2a exists
    to prevent. So every pass that sets a place, rather than shifting one, sets it
    through these. */
-function boxOffY(n){ return isPt(n) ? PTR + 4 : 2; }
-function boxOffX(n){ return isPt(n) ? PTR + 4 : (nIn(n) ? STUB : 0) + 2; }
+export function boxOffY(n){ return isPt(n) ? PTR + 4 : 2; }
+export function boxOffX(n){ return isPt(n) ? PTR + 4 : (nIn(n) ? STUB : 0) + 2; }
 /* Set the columns down a gap apart, each one only as wide as it needs. A column
    of nothing but junctions is a branch, not a stage of the circuit, so it is given
    half the gap — it should read as part of the wiring either side of it.
@@ -182,7 +189,7 @@ function boxOffX(n){ return isPt(n) ? PTR + 4 : (nIn(n) ? STUB : 0) + 2; }
    The gap is kept narrow, because the gaps are most of the width of a drawing.
    A gap that will have runs turning in it is the exception, and `extra` is the
    room those turns need, in pixels, for each column that needs any. */
-function layoutX(bands, extra){
+export function layoutX(bands, extra){
   var x = 0, i, j, g, wide, b, allPt, gap;
   for (i = 0; i < bands.length; i++){
     g = bands[i]; wide = 0; allPt = true;
@@ -215,7 +222,7 @@ function layoutX(bands, extra){
        and anything fed only from its right, falls back on the order it was built
        in. From there every press runs the same course and lands in the same
        place. */
-function idRank(n){ return parseInt(String(n.id).replace(/\D+/g, ""), 10) || 0; }
+export function idRank(n){ return parseInt(String(n.id).replace(/\D+/g, ""), 10) || 0; }
 /* 2b. The inputs keep the order they are in.
 
        Nothing drives a switch, so the wiring says nothing whatever about which
@@ -234,11 +241,11 @@ function idRank(n){ return parseInt(String(n.id).replace(/\D+/g, ""), 10) || 0; 
        thing pass 2a is for: the cleaner leaves the inputs in pin order, so a
        second press reads back the same pins and lays down the same sheet. */
 var pin = new Map();
-function pinInputs(){
+export function pinInputs(){
   var list = [], i, n;
   pin = new Map();
-  for (i = 0; i < nodes.length; i++){
-    n = nodes[i];
+  for (i = 0; i < S.nodes.length; i++){
+    n = S.nodes[i];
     if (!nIn(n)) list.push(n);                /* nothing to drive it: it is an input */
   }
   list.sort(function(p, q){
@@ -248,19 +255,19 @@ function pinInputs(){
 }
 /* The pinned parts of one column put back in pin order, every other part left in
    the slot the ordering gave it. */
-function repin(g){
+export function repin(g){
   var slots = [], mem = [], i;
   for (i = 0; i < g.length; i++) if (pin.has(g[i].id)){ slots.push(i); mem.push(g[i]); }
   if (mem.length < 2) return;
   mem.sort(function(p, q){ return pin.get(p.id) - pin.get(q.id); });
   for (i = 0; i < slots.length; i++) g[slots[i]] = mem[i];
 }
-function seedOrder(bands){
+export function seedOrder(bands){
   var rank = new Map(), i, j, g, mean;
   mean = function(n){
     var k, w, r, sum = 0, cnt = 0;
-    for (k = 0; k < wires.length; k++){
-      w = wires[k];
+    for (k = 0; k < S.wires.length; k++){
+      w = S.wires[k];
       if (w.b !== n.id || !w.a) continue;
       r = rank.get(w.a);
       if (r === undefined) continue;        /* fed from its own right: a loop */
@@ -277,7 +284,7 @@ function seedOrder(bands){
   }
 }
 /* and the heights to match the order, packed from the top of the sheet down */
-function seedY(bands){
+export function seedY(bands){
   var i, j, g, y, b;
   for (i = 0; i < bands.length; i++){
     g = bands[i]; y = 0;
@@ -290,15 +297,15 @@ function seedY(bands){
 }
 /* 3. Order a column by the height of what drives it (or, for the leftmost
       column, of what it drives), then pack it from its own top down. */
-function stackY(bands){
+export function stackY(bands){
   var side = function(bands, back){
     var i, j, k, g, mid = new Map(), top, hb;
     for (i = 0; i < bands.length; i++){
       g = back ? bands[bands.length - 1 - i] : bands[i];
       for (j = 0; j < g.length; j++){
         var n = g[j], sum = 0, cnt = 0;
-        for (k = 0; k < wires.length; k++){
-          var w = wires[k], o = null;
+        for (k = 0; k < S.wires.length; k++){
+          var w = S.wires[k], o = null;
           if (!w.a || !w.b) continue;
           if (!back && w.b === n.id) o = byId.get(w.a);
           if (back && w.a === n.id) o = byId.get(w.b);
@@ -328,7 +335,7 @@ function stackY(bands){
 }
 
 /* Both ends of a wire, as the parts they sit on and the points they are drawn to. */
-function ends(w){
+export function ends(w){
   var a = w.a ? byId.get(w.a) : null, b = w.b ? byId.get(w.b) : null;
   var pa = a ? outPort(a, w.q) : w.fa, pb = b ? inPort(b, w.p) : w.fb;
   if (!pa || !pb) return null;
@@ -337,14 +344,14 @@ function ends(w){
 /* Which coordinate the two ends have to share. A part's stubs point sideways, so
    a run into one is made level. Only a run between loose ends and Points is free
    to stand up instead, which is how a vertical branch gets built in the first place. */
-function runAxis(e){
+export function runAxis(e){
   var free = (!e.a || isPt(e.a)) && (!e.b || isPt(e.b));
   return (free && Math.abs(e.pb.y - e.pa.y) > Math.abs(e.pb.x - e.pa.x)) ? "x" : "y";
 }
-function leanOf(e, axis){ return axis === "y" ? e.pb.y - e.pa.y : e.pb.x - e.pa.x; }
-function coordOf(axis, n){ return axis === "y" ? n.y : n.x; }
-function boxAt(n, x, y){ var b = box(n); return {x:b.x + (x - n.x), y:b.y + (y - n.y), w:b.w, h:b.h}; }
-function hits(A, B){
+export function leanOf(e, axis){ return axis === "y" ? e.pb.y - e.pa.y : e.pb.x - e.pa.x; }
+export function coordOf(axis, n){ return axis === "y" ? n.y : n.x; }
+export function boxAt(n, x, y){ var b = box(n); return {x:b.x + (x - n.x), y:b.y + (y - n.y), w:b.w, h:b.h}; }
+export function hits(A, B){
   return Math.min(A.x + A.w, B.x + B.w) > Math.max(A.x, B.x) &&
          Math.min(A.y + A.h, B.y + B.h) > Math.max(A.y, B.y);
 }
@@ -352,20 +359,20 @@ function hits(A, B){
 /* A rigid row: parts whose coordinate on one axis is pinned to each other, so the
    whole row slides as one piece. rel is where a member sits when the row is left
    where it was found, which is why a part nothing ties to never moves at all. */
-function rowsNew(axis){ return {axis:axis, at:new Map(), rel:new Map(), mem:[]}; }
-function rowFind(R, n){
+export function rowsNew(axis){ return {axis:axis, at:new Map(), rel:new Map(), mem:[]}; }
+export function rowFind(R, n){
   if (!R.at.has(n.id)){
     R.at.set(n.id, R.mem.length); R.rel.set(n.id, coordOf(R.axis, n)); R.mem.push([n]);
   }
   return R.at.get(n.id);
 }
-function relBox(R, n, s){
+export function relBox(R, n, s){
   var v = R.rel.get(n.id) + s;
   return R.axis === "y" ? boxAt(n, n.x, v) : boxAt(n, v, n.y);
 }
 /* Tie two parts so that a.coord - b.coord comes out at k. Refused, and left for an
    elbow, when the row already says otherwise or when the join would stack parts. */
-function rowTie(R, a, b, k){
+export function rowTie(R, a, b, k){
   var ga = rowFind(R, a), gb = rowFind(R, b), i, j, s, A, B;
   if (ga === gb) return Math.abs((R.rel.get(a.id) - R.rel.get(b.id)) - k) < 0.5;
   s = R.rel.get(a.id) - k - R.rel.get(b.id);
@@ -388,7 +395,7 @@ function rowTie(R, a, b, k){
 }
 /* Set each row down where it costs the least travel: the middle of where its own
    parts came from. A row of one lands exactly where it was. */
-function rowPlace(R){
+export function rowPlace(R){
   var i, j, g, d, shift;
   for (i = 0; i < R.mem.length; i++){
     g = R.mem[i];
@@ -408,15 +415,15 @@ function rowPlace(R){
    corner before anything is laid out — so what is left to compare is the ids of
    the parts the sheet was drawn with, and those do not change from one press to
    the next. */
-function cmpId(a, b){
+export function cmpId(a, b){
   var x = a ? a.id : "", y = b ? b.id : "";
   return x < y ? -1 : x > y ? 1 : 0;
 }
 /* Pin every run that can be pinned, and hand back the ones that cannot. */
-function alignRows(){
+export function alignRows(){
   var R = {y:rowsNew("y"), x:rowsNew("x")}, list = [], bad = [], i, e, axis, k;
-  for (i = 0; i < wires.length; i++){
-    e = ends(wires[i]);
+  for (i = 0; i < S.wires.length; i++){
+    e = ends(S.wires[i]);
     if (!e || !e.a || !e.b) continue;        /* a loose end is pulled on to the line later */
     axis = runAxis(e);
     list.push({e:e, axis:axis, off:Math.abs(leanOf(e, axis))});
@@ -448,7 +455,7 @@ function alignRows(){
 }
 /* How far two part boxes lap over each other, on each axis. Positive both ways
    means one is sitting on top of the other. */
-function lap(m, n){
+export function lap(m, n){
   var A = box(m), B = box(n);
   return {x:Math.min(A.x + A.w, B.x + B.w) - Math.max(A.x, B.x),
           y:Math.min(A.y + A.h, B.y + B.h) - Math.max(A.y, B.y)};
@@ -456,7 +463,7 @@ function lap(m, n){
 /* Nothing readable hides behind something else. Parts are pushed apart a whole row
    at a time and only vertically, so squaring a run up is not undone to make room
    and the left-to-right flow of the signal is left alone. */
-function unstack(R){
+export function unstack(R){
   var solo = new Map();
   var row = function(n){
     var g = R.at.has(n.id) ? R.mem[R.at.get(n.id)] : null;
@@ -468,14 +475,14 @@ function unstack(R){
   var k, i, j, o, d, hit, gi, gj;
   for (k = 0; k < 14; k++){
     hit = false;
-    for (i = 0; i < nodes.length; i++)
-      for (j = i + 1; j < nodes.length; j++){
-        o = lap(nodes[i], nodes[j]);
+    for (i = 0; i < S.nodes.length; i++)
+      for (j = i + 1; j < S.nodes.length; j++){
+        o = lap(S.nodes[i], S.nodes[j]);
         if (o.x <= 0 || o.y <= 0) continue;
-        gi = row(nodes[i]); gj = row(nodes[j]);
+        gi = row(S.nodes[i]); gj = row(S.nodes[j]);
         if (gi === gj) continue;             /* one row: it was cleared when it was tied */
         hit = true; d = (o.y + ROOM) / 2;
-        if (box(nodes[i]).y <= box(nodes[j]).y){ slide(gi, -d); slide(gj, d); }
+        if (box(S.nodes[i]).y <= box(S.nodes[j]).y){ slide(gi, -d); slide(gj, d); }
         else { slide(gi, d); slide(gj, -d); }
       }
     if (!hit) return;
@@ -496,9 +503,9 @@ function unstack(R){
       first) and all stand the same height: the deal only ever swaps two of them
       over in slots that were already theirs. A run left on a slant by a swap is
       squared off by pass 6 along with every other slant. */
-function orderInputs(){
+export function orderInputs(){
   var list = [], tops = [], i;
-  for (i = 0; i < nodes.length; i++) if (pin.has(nodes[i].id)) list.push(nodes[i]);
+  for (i = 0; i < S.nodes.length; i++) if (pin.has(S.nodes[i].id)) list.push(S.nodes[i]);
   if (list.length < 2) return;
   for (i = 0; i < list.length; i++) tops.push(box(list[i]).y);
   tops.sort(function(p, q){ return p - q; });
@@ -509,17 +516,17 @@ function orderInputs(){
       A row moves as one piece, so a run that was just made straight stays
       straight; a span that laps over the one above it is already as close as it
       can get and is left alone. */
-function squeezeY(R){
+export function squeezeY(R){
   var seen = new Set(), items = [], i, j, g, lo, hi, it, shift = 0, edge = null, gap, b;
   var span = function(list, lo, hi){
     return {lo:lo, hi:hi, set:function(d){
       for (var k = 0; k < list.length; k++) list[k].y += d;
     }};
   };
-  for (i = 0; i < nodes.length; i++){
-    if (seen.has(nodes[i].id)) continue;
-    g = R.at.has(nodes[i].id) ? R.mem[R.at.get(nodes[i].id)] : null;
-    if (!g || !g.length) g = [nodes[i]];
+  for (i = 0; i < S.nodes.length; i++){
+    if (seen.has(S.nodes[i].id)) continue;
+    g = R.at.has(S.nodes[i].id) ? R.mem[R.at.get(S.nodes[i].id)] : null;
+    if (!g || !g.length) g = [S.nodes[i]];
     lo = Infinity; hi = -Infinity;
     for (j = 0; j < g.length; j++){
       seen.add(g[j].id); b = box(g[j]);
@@ -528,10 +535,10 @@ function squeezeY(R){
     items.push(span(g, lo, hi));
   }
   /* a wire floating free of every part is one more thing with a height */
-  for (i = 0; i < wires.length; i++){
-    if (wires[i].a || wires[i].b) continue;
-    if (!wires[i].fa || !wires[i].fb) continue;
-    g = [wires[i].fa, wires[i].fb];
+  for (i = 0; i < S.wires.length; i++){
+    if (S.wires[i].a || S.wires[i].b) continue;
+    if (!S.wires[i].fa || !S.wires[i].fb) continue;
+    g = [S.wires[i].fa, S.wires[i].fb];
     items.push(span(g, Math.min(g[0].y, g[1].y), Math.max(g[0].y, g[1].y)));
   }
   items.sort(function(p, q){ return p.lo - q.lo; });
@@ -547,10 +554,10 @@ function squeezeY(R){
 }
 /* A loose end has nothing holding it: it steps on to the line of whatever it is
    wired to, one gap clear of the port, so it follows its part across the sheet. */
-function pullEnds(){
+export function pullEnds(){
   var i, w, e, axis;
-  for (i = 0; i < wires.length; i++){
-    w = wires[i];
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i];
     if (w.a && w.b) continue;
     e = ends(w);
     if (!e) continue;
@@ -582,40 +589,40 @@ function pullEnds(){
       Nothing here depends on the order the wires sit in the list: that order is
       reshuffled whenever a corner is dissolved, so everything is sorted by place
       and by id, and a second press lays down the same drawing. */
-function ride(pa, pb, b){
+export function ride(pa, pb, b){
   /* does the straight run pa-pb, level, go through this box? */
   var pad = 3, x1 = Math.min(pa.x, pb.x), x2 = Math.max(pa.x, pb.x);
   return pa.y > b.y - pad && pa.y < b.y + b.h + pad && x2 > b.x && x1 < b.x + b.w;
 }
-function blockedRun(e){
+export function blockedRun(e){
   var i, n;
   if (Math.abs(e.pb.y - e.pa.y) > LEAN) return false;
-  for (i = 0; i < nodes.length; i++){
-    n = nodes[i];
+  for (i = 0; i < S.nodes.length; i++){
+    n = S.nodes[i];
     if (n === e.a || n === e.b) continue;
     if (ride(e.pa, e.pb, box(n))) return true;
   }
   return false;
 }
-function bandEdges(g){
+export function bandEdges(g){
   var lo = Infinity, hi = -Infinity, j, b;
   for (j = 0; j < g.length; j++){ b = box(g[j]); lo = Math.min(lo, b.x); hi = Math.max(hi, b.x + b.w); }
   return {lo:lo, hi:hi};
 }
-function route(){
+export function route(){
   var col = colOf(), bands = colBands(col), nb = bands.length, bandOf = new Map();
   var jobs = [], jobSet = new Set(), used = [], made = 0, i, j, k, w, e, g, it, d;
   bands.forEach(function(gr, bi){ gr.forEach(function(nd){ bandOf.set(nd.id, bi); }); });
 
   /* which runs need routing */
-  for (i = 0; i < wires.length; i++){
-    w = wires[i]; e = ends(w);
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i]; e = ends(w);
     if (!e || !e.a || !e.b) continue;
     if (runAxis(e) !== "y") continue;           /* a branch standing up between corners is left alone */
     if (Math.abs(e.pb.y - e.pa.y) > LEAN || blockedRun(e)) jobSet.add(w);
   }
   if (!jobSet.size) return 0;
-  wires.forEach(function(wr){
+  S.wires.forEach(function(wr){
     if (!jobSet.has(wr)) return;
     var ee = ends(wr), ca = bandOf.get(wr.a), cb = bandOf.get(wr.b);
     jobs.push({w:wr, net:wr.a + "." + (wr.q | 0), ca:ca, cb:cb, adj:cb === ca + 1, y0:ee.pa.y, y1:ee.pb.y});
@@ -710,9 +717,9 @@ function route(){
     if (d <= 0) continue;
     d = snapUp(d);
     for (j = g + 1; j < nb; j++) bands[j].forEach(function(nd){ nd.x += d; });
-    for (j = 0; j < wires.length; j++){
-      if (wires[j].fa && wires[j].fa.x >= R.lo) wires[j].fa.x += d;
-      if (wires[j].fb && wires[j].fb.x >= R.lo) wires[j].fb.x += d;
+    for (j = 0; j < S.wires.length; j++){
+      if (S.wires[j].fa && S.wires[j].fa.x >= R.lo) S.wires[j].fa.x += d;
+      if (S.wires[j].fb && S.wires[j].fb.x >= R.lo) S.wires[j].fb.x += d;
     }
   }
   pullEnds();
@@ -728,8 +735,8 @@ function route(){
   });
 
   /* heights already spoken for: every run left level, with the span it covers */
-  for (i = 0; i < wires.length; i++){
-    w = wires[i];
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i];
     if (jobSet.has(w)) continue;
     e = ends(w);
     if (!e || !e.a || !e.b || Math.abs(e.pb.y - e.pa.y) > LEAN) continue;
@@ -795,7 +802,7 @@ function route(){
       nd = cache[key];
       if (!nd){
         nd = addNode("POINT", pts[s][0], pts[s][1]);
-        wires.push({id:newId("w"), a:prev.id, q:prev.q, b:nd.id, p:0, fa:null, fb:null});
+        S.wires.push({id:newId("w"), a:prev.id, q:prev.q, b:nd.id, p:0, fa:null, fb:null});
         cache[key] = nd; made++;
       }
       prev = {id:nd.id, q:0};
@@ -818,31 +825,31 @@ function route(){
   });
   return made;
 }
-function bounds(){
+export function bounds(){
   var i, w, n, b, r = null, add = function(x, y, x2, y2){
     if (!r) r = {x:x, y:y, x2:x2, y2:y2};
     else { r.x = Math.min(r.x, x); r.y = Math.min(r.y, y); r.x2 = Math.max(r.x2, x2); r.y2 = Math.max(r.y2, y2); }
   };
-  for (i = 0; i < nodes.length; i++){ n = nodes[i]; b = box(n); add(b.x, b.y, b.x + b.w, b.y + b.h); }
-  for (i = 0; i < wires.length; i++){
-    w = wires[i];
+  for (i = 0; i < S.nodes.length; i++){ n = S.nodes[i]; b = box(n); add(b.x, b.y, b.x + b.w, b.y + b.h); }
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i];
     if (w.fa) add(w.fa.x, w.fa.y, w.fa.x, w.fa.y);
     if (w.fb) add(w.fb.x, w.fb.y, w.fb.x, w.fb.y);
   }
   return r;
 }
 /* How much sheet the drawing takes up, for the before-and-after. */
-function area(r){ return r ? Math.max(1, (r.x2 - r.x) * (r.y2 - r.y)) : 1; }
+export function area(r){ return r ? Math.max(1, (r.x2 - r.x) * (r.y2 - r.y)) : 1; }
 /* Where every part and loose end has ended up, to a hundredth of a pixel. The
    settling loop below stops as soon as a pass stops changing this. */
 /* Where every part and loose end has ended up, to a hundredth of a pixel, so one
    round of the passes can be told from another. */
-function placeMark(){
+export function placeMark(){
   var i, w, s = [];
-  for (i = 0; i < nodes.length; i++)
-    s.push(Math.round(nodes[i].x * 100) + "," + Math.round(nodes[i].y * 100));
-  for (i = 0; i < wires.length; i++){
-    w = wires[i];
+  for (i = 0; i < S.nodes.length; i++)
+    s.push(Math.round(S.nodes[i].x * 100) + "," + Math.round(S.nodes[i].y * 100));
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i];
     if (w.fa) s.push("a" + Math.round(w.fa.x * 100) + "," + Math.round(w.fa.y * 100));
     if (w.fb) s.push("b" + Math.round(w.fb.x * 100) + "," + Math.round(w.fb.y * 100));
   }
@@ -850,40 +857,40 @@ function placeMark(){
 }
 /* How good a sheet this round made: corners it could not avoid first, then the
    paper it takes, then the wire it spends. Fewer, smaller, shorter. */
-function layoutScore(bad){
+export function layoutScore(bad){
   var i, e, len = 0;
-  for (i = 0; i < wires.length; i++){
-    e = ends(wires[i]);
+  for (i = 0; i < S.wires.length; i++){
+    e = ends(S.wires[i]);
     if (e) len += Math.abs(e.pb.x - e.pa.x) + Math.abs(e.pb.y - e.pa.y);
   }
   return [bad.length, Math.round(area(bounds())), Math.round(len)];
 }
-function scoreLess(p, q){
+export function scoreLess(p, q){
   for (var i = 0; i < p.length; i++) if (p[i] !== q[i]) return p[i] < q[i];
   return false;
 }
 /* A round's sheet, kept so it can be gone back to once the rounds are done. The
    loop neither adds nor drops a part or a wire, so position by position is the
    whole of it. */
-function keepPlace(bad, cols){
+export function keepPlace(bad, cols){
   var i, w, pos = [], fre = [];
-  for (i = 0; i < nodes.length; i++) pos.push(nodes[i].x, nodes[i].y);
-  for (i = 0; i < wires.length; i++){
-    w = wires[i];
+  for (i = 0; i < S.nodes.length; i++) pos.push(S.nodes[i].x, S.nodes[i].y);
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i];
     fre.push(w.fa ? w.fa.x : 0, w.fa ? w.fa.y : 0, w.fb ? w.fb.x : 0, w.fb ? w.fb.y : 0);
   }
   return {pos:pos, fre:fre, bad:bad, cols:cols, score:layoutScore(bad)};
 }
-function putPlace(p){
+export function putPlace(p){
   var i, w, k;
-  for (i = 0; i < nodes.length; i++){ nodes[i].x = p.pos[i * 2]; nodes[i].y = p.pos[i * 2 + 1]; }
-  for (i = 0; i < wires.length; i++){
-    w = wires[i]; k = i * 4;
+  for (i = 0; i < S.nodes.length; i++){ S.nodes[i].x = p.pos[i * 2]; S.nodes[i].y = p.pos[i * 2 + 1]; }
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i]; k = i * 4;
     if (w.fa){ w.fa.x = p.fre[k]; w.fa.y = p.fre[k + 1]; }
     if (w.fb){ w.fb.x = p.fre[k + 2]; w.fb.y = p.fre[k + 3]; }
   }
 }
-function bestPlace(log, from){
+export function bestPlace(log, from){
   var i, b = log[from];
   for (i = from + 1; i < log.length; i++) if (scoreLess(log[i].score, b.score)) b = log[i];
   return b;
@@ -894,120 +901,103 @@ function bestPlace(log, from){
    at once. Keeping a sheet per pass costs nothing worth counting — there are
    seven — and it means the playback is the real thing each pass did rather than
    a drawing of it. */
-function stepTrack(){
+export function stepTrack(){
   var steps = [{doc:snapshot(), name:"The sheet as it stands"}];
   var step = function(name){ steps.push({doc:snapshot(), name:name}); };
   step.steps = steps;
   return step;
 }
-var STEP_MS = 340, HOLD_MS = 120, stepPlay = true, play = null;
-function reduceMotion(){
+export var STEP_MS = 340; export var HOLD_MS = 120; S.stepPlay = true; S.play = null;
+export function reduceMotion(){
   return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
-/* The list of passes, the one running now lit. Captions are this file's own
-   words, so they are set as text rather than built into markup. */
-function stepPanel(at){
-  var el = $("#steps"), ol, li, i, b;
-  if (!at){ el.classList.remove("show"); el.hidden = true; el.textContent = ""; return; }
-  el.textContent = "";
-  b = document.createElement("b");
-  b.textContent = "Cleaner · step " + at + " of " + (play.s.length - 1);
-  el.appendChild(b);
-  ol = document.createElement("ol");
-  for (i = 1; i < play.s.length; i++){
-    li = document.createElement("li");
-    li.className = i < at ? "done" : i === at ? "now" : "";
-    var k = document.createElement("i");
-    k.textContent = i < at ? "✓" : String(i);
-    li.appendChild(k);
-    li.appendChild(document.createTextNode(play.s[i].name));
-    ol.appendChild(li);
-  }
-  el.appendChild(ol);
-  el.hidden = false; el.classList.add("show");
+/* The list of passes, the one running now lit: the Steps component draws it. */
+export function stepPanel(at){
+  S.steps = at ? {at:at, names:S.play.s.slice(1).map(function(s){ return s.name; })} : null;
+  notify();
 }
 /* A pass's sheet, put up without disturbing where the view is pointed: the pan
    is travelled separately, so the drawing is not yanked about as it tidies. */
-function playShow(doc){
-  var keep = {x:pan.x, y:pan.y};
-  load(doc); pan = keep; evaluate();
+export function playShow(doc){
+  var keep = {x:S.pan.x, y:S.pan.y};
+  load(doc); S.pan = keep; evaluate();
 }
-function playStage(){
-  var prev = play.s[play.i - 1].doc, cur = play.s[play.i], was = {}, wasW = {}, mv = [], i, n, o, w;
+export function playStage(){
+  var prev = S.play.s[S.play.i - 1].doc, cur = S.play.s[S.play.i], was = {}, wasW = {}, mv = [], i, n, o, w;
   for (i = 0; i < prev.nodes.length; i++) was[prev.nodes[i].id] = prev.nodes[i];
   for (i = 0; i < prev.wires.length; i++) wasW[prev.wires[i].id] = prev.wires[i];
   playShow(cur.doc);
   /* a part the pass moved travels; one the pass made starts where it ends, so a
      new corner simply appears at the turn it was made for */
-  for (i = 0; i < nodes.length; i++){
-    n = nodes[i]; o = was[n.id];
+  for (i = 0; i < S.nodes.length; i++){
+    n = S.nodes[i]; o = was[n.id];
     mv.push({o:n, x0:o ? o.x : n.x, y0:o ? o.y : n.y, x1:n.x, y1:n.y});
   }
-  for (i = 0; i < wires.length; i++){
-    w = wires[i]; o = wasW[w.id];
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i]; o = wasW[w.id];
     if (w.fa) mv.push({o:w.fa, x0:o && o.fa ? o.fa.x : w.fa.x, y0:o && o.fa ? o.fa.y : w.fa.y, x1:w.fa.x, y1:w.fa.y});
     if (w.fb) mv.push({o:w.fb, x0:o && o.fb ? o.fb.x : w.fb.x, y0:o && o.fb ? o.fb.y : w.fb.y, x1:w.fb.x, y1:w.fb.y});
   }
-  play.mv = mv;
-  play.pan = {x0:prev.pan ? prev.pan.x : pan.x, y0:prev.pan ? prev.pan.y : pan.y,
-              x1:cur.doc.pan ? cur.doc.pan.x : pan.x, y1:cur.doc.pan ? cur.doc.pan.y : pan.y};
-  play.t0 = 0;
-  stepPanel(play.i);
-  play.raf = requestAnimationFrame(playFrame);
+  S.play.mv = mv;
+  S.play.pan = {x0:prev.pan ? prev.pan.x : S.pan.x, y0:prev.pan ? prev.pan.y : S.pan.y,
+              x1:cur.doc.pan ? cur.doc.pan.x : S.pan.x, y1:cur.doc.pan ? cur.doc.pan.y : S.pan.y};
+  S.play.t0 = 0;
+  stepPanel(S.play.i);
+  S.play.raf = requestAnimationFrame(playFrame);
 }
-function playFrame(ts){
-  if (!play) return;
-  if (!play.t0) play.t0 = ts;
-  var d = ts - play.t0, k = Math.min(1, d / STEP_MS), e, i, o;
+export function playFrame(ts){
+  if (!S.play) return;
+  if (!S.play.t0) S.play.t0 = ts;
+  var d = ts - S.play.t0, k = Math.min(1, d / STEP_MS), e, i, o;
   e = k < 0.5 ? 2 * k * k : 1 - 2 * (1 - k) * (1 - k);     /* ease in, ease out */
-  for (i = 0; i < play.mv.length; i++){
-    o = play.mv[i];
+  for (i = 0; i < S.play.mv.length; i++){
+    o = S.play.mv[i];
     o.o.x = o.x0 + (o.x1 - o.x0) * e;
     o.o.y = o.y0 + (o.y1 - o.y0) * e;
   }
-  pan.x = play.pan.x0 + (play.pan.x1 - play.pan.x0) * e;
-  pan.y = play.pan.y0 + (play.pan.y1 - play.pan.y0) * e;
+  S.pan.x = S.play.pan.x0 + (S.play.pan.x1 - S.play.pan.x0) * e;
+  S.pan.y = S.play.pan.y0 + (S.play.pan.y1 - S.play.pan.y0) * e;
   render();
-  if (d < STEP_MS + HOLD_MS){ play.raf = requestAnimationFrame(playFrame); return; }
-  play.i++;
-  if (play.i >= play.s.length){ playEnd(); return; }
+  if (d < STEP_MS + HOLD_MS){ S.play.raf = requestAnimationFrame(playFrame); return; }
+  S.play.i++;
+  if (S.play.i >= S.play.s.length){ playEnd(); return; }
   playStage();
 }
 /* Straight to the finished sheet: when the passes have all been shown, and when
    anything at all is asked of the bench while they are still being shown. */
-function playEnd(){
-  if (!play) return;
-  var last = play.s[play.s.length - 1].doc;
-  if (play.raf) cancelAnimationFrame(play.raf);
-  play = null;
+export function playEnd(){
+  if (!S.play) return;
+  var last = S.play.s[S.play.s.length - 1].doc;
+  if (S.play.raf) cancelAnimationFrame(S.play.raf);
+  S.play = null;
   stepPanel(0);
   load(last);
   evaluate(); draw();
 }
-function playSteps(steps){
-  if (play) playEnd();
-  if (!stepPlay || reduceMotion() || steps.length < 2){ stepPanel(0); return; }
-  play = {s:steps, i:1, raf:0};
+export function playSteps(steps){
+  if (S.play) playEnd();
+  if (!S.stepPlay || reduceMotion() || steps.length < 2){ stepPanel(0); return; }
+  S.play = {s:steps, i:1, raf:0};
   playStage();
 }
 /* Wires attached to nothing, put back level (or plumb, whichever they leant towards)
    in a row beneath everything else, in the order they were drawn. */
-function layOrphans(list){
+export function layOrphans(list){
   var r = bounds(), x = r ? r.x : 0, y = r ? r.y2 + 60 : 0, i, w, dx, dy;
   for (i = 0; i < list.length; i++){
     w = list[i]; dx = w.fb.x - w.fa.x; dy = w.fb.y - w.fa.y;
     if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0;
     w.fa = {x:x, y:y}; w.fb = {x:x + dx, y:y + dy};
     y += Math.abs(dy) + 30;
-    wires.push(w);
+    S.wires.push(w);
   }
 }
 /* The cleaner moves parts and adds corners, so it keeps the sheet it started
    from for Ctrl+Z. */
-function cleanUp(sure){
-  if (docKind === "quantum"){ flash("The Cleaner lays out classical builds only, for now."); return; }
-  if (testMode) return;
-  if (!nodes.length){ flash("Nothing on the sheet to clean up yet."); return; }
+export function cleanUp(sure){
+  if (S.docKind === "quantum"){ flash("The Cleaner lays out classical builds only, for now."); return; }
+  if (S.testMode) return;
+  if (!S.nodes.length){ flash("Nothing on the sheet to clean up yet."); return; }
   if (Collab.active() && sure !== true && Collab.peers().length){
     ask({title:"Tidy the shared sheet", ok:"Tidy it", msg:"The Cleaner rearranges every part on this sheet, including the parts others are working on right now. Ctrl+Z puts yours back.",
       done:function(){ cleanUp(true); }});
@@ -1019,8 +1009,8 @@ function cleanUp(sure){
      to hold it to. It is set aside while the parts are laid out, then squared and
      laid in a row under the finished circuit — so it lands in the same place every
      press instead of being carried further along each time. */
-  var orphans = wires.filter(function(w){ return !w.a && !w.b && w.fa && w.fb; });
-  if (orphans.length) wires = wires.filter(function(w){ return orphans.indexOf(w) < 0; });
+  var orphans = S.wires.filter(function(w){ return !w.a && !w.b && w.fa && w.fb; });
+  if (orphans.length) S.wires = S.wires.filter(function(w){ return orphans.indexOf(w) < 0; });
   var step = stepTrack();            /* the sheet as it stands, to play back from */
   pinInputs();                       /* the order the inputs are in, before a thing has moved */
   dissolvePoints();
@@ -1075,8 +1065,8 @@ function cleanUp(sure){
   var corners = route();
   if (orphans.length) layOrphans(orphans);
   var r = bounds();
-  if (r){ pan.x = 48 - r.x * zoom; pan.y = 40 - r.y * zoom; }
-  clearPick(); pend = null; wiring = null; wend = null; marq = null;
+  if (r){ S.pan.x = 48 - r.x * S.zoom; S.pan.y = 40 - r.y * S.zoom; }
+  clearPick(); S.pend = null; S.wiring = null; S.wend = null; S.marq = null;
   step("Routed — every net in its own lane, nothing drawn through a part");
   commit();
   playSteps(step.steps);
@@ -1086,60 +1076,45 @@ function cleanUp(sure){
     (saved > 2 ? " · " + saved + "% less space" : "") +
     " · Ctrl+Z puts it back");
 }
-/* Light the rail tool that matches the mode we are actually in. */
-function markTool(){
-  var w = document.querySelector('.part[data-t="WIRE"]'),
-      s = document.querySelector('.part[data-t="SELECT"]'),
-      r = document.querySelector('.part[data-t="REGION"]'),
-      v = document.querySelector('.part[data-t="PASTE"]');
-  if (w) w.classList.toggle("on", wireMode);
-  if (r) r.classList.toggle("on", regionMode);
-  if (v){ v.classList.toggle("on", pasteMode); v.classList.toggle("off", !clip); }
-  if (s) s.classList.toggle("on", !wireMode && !regionMode && !pasteMode);
-}
-function cursorFor(){
-  if (testMode) return "pointer";
-  if (pasteMode) return "copy";
-  if (wireMode) return "cell";
-  if (regionMode) return "crosshair";
+/* the pointer over the sheet says which tool is in hand */
+export function setCursor(){ if (S.cv) S.cv.style.cursor = cursorFor(); }
+export function cursorFor(){
+  if (S.testMode) return "pointer";
+  if (S.pasteMode) return "copy";
+  if (S.wireMode) return "cell";
+  if (S.regionMode) return "crosshair";
   return "grab";              /* dragging the bare sheet moves it */
 }
-function setWireMode(on){
-  wireMode = !!on; pend = null;
-  if (wireMode){ regionMode = false; pasteMode = false; }
-  markTool();
-  cv.style.cursor = cursorFor();
+export function setWireMode(on){
+  S.wireMode = !!on; S.pend = null;
+  if (S.wireMode){ S.regionMode = false; S.pasteMode = false; }
+  notify();
+  setCursor();
   draw();
 }
 /* The band tool: drag anywhere on the sheet to box in a region, finger or mouse. */
-function setRegionMode(on){
-  regionMode = !!on;
-  if (regionMode){ wireMode = false; pasteMode = false; pend = null; }
-  markTool();
-  cv.style.cursor = cursorFor();
+export function setRegionMode(on){
+  S.regionMode = !!on;
+  if (S.regionMode){ S.wireMode = false; S.pasteMode = false; S.pend = null; }
+  notify();
+  setCursor();
   draw();
 }
 /* Back to the plain cursor: no wire mode, no band, nothing half-drawn in hand. */
-function setSelectMode(){
-  wiring = null; wend = null; marq = null; regionMode = false; pasteMode = false;
+export function setSelectMode(){
+  S.wiring = null; S.wend = null; S.marq = null; S.regionMode = false; S.pasteMode = false;
   setWireMode(false);
 }
 /* Test mode: the circuit is frozen as built and can only be driven. Switches and
    buttons still work; nothing can be moved, wired, renamed or deleted. */
-function setTest(on){
-  testMode = !!on;
-  if (testMode){
-    wiring = null; wend = null; drag = null; marq = null; regionMode = false; pasteMode = false;
-    clearPick(); ren.hidden = true;
+export function setTest(on){
+  S.testMode = !!on;
+  if (S.testMode){
+    S.wiring = null; S.wend = null; S.drag = null; S.marq = null; S.regionMode = false; S.pasteMode = false;
+    clearPick(); closeRename();
     setWireMode(false);
   }
-  var b = $("#btnTest");
-  b.textContent = testMode ? "Test · on" : "Test";
-  b.classList.toggle("armed", testMode);
-  $("#rail").classList.toggle("lock", testMode);
-  pickDel();
-  $("#btnClean").disabled = testMode;
-  tipShow();
-  cv.style.cursor = cursorFor();
+  notify();
+  setCursor();
   draw();
 }

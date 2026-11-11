@@ -1,22 +1,23 @@
 /* The bench's shared state: constants, part types, colours and part geometry. */
-"use strict";
+import { S, notify } from "./state.js";
+import { Auth } from "./auth.js";
 
-var $ = function(s){ return document.querySelector(s); };
-var cv = $("#cv"), ctx = cv.getContext("2d"), ren = $("#ren");
-var STUB = 9, GRID = 24, SNAP = 12, PORT = 12, PTR = 5, MONO = '500 10px "IBM Plex Mono", monospace';
-/* each account keeps its own builds: js/auth.js gives the keys their owner's name */
-function LIBKEY(){ return Auth.key("lib"); }
-function CURKEY(){ return Auth.key("cur"); }
+/* the sheet's canvas and its drawing context, handed over by the Stage component when it mounts */
+S.cv = null; S.ctx = null;
+export var STUB = 9; export var GRID = 24; export var SNAP = 12; export var PORT = 12; export var PTR = 5; export var MONO = '500 10px "IBM Plex Mono", monospace';
+/* each account keeps its own builds: auth.js gives the keys their owner's name */
+export function LIBKEY(){ return Auth.key("lib"); }
+export function CURKEY(){ return Auth.key("cur"); }
 /* A new part or wire's id. In a shared project every device tags its ids with its
    own mark (IDTAG, set by js/collab.js), so two people can never mint the same one. */
-var IDTAG = "";
-function newId(p){
-  var id, taken = function(x){ for (var i = 0; i < wires.length; i++) if (wires[i].id === x) return true; return false; };
-  do { id = p + (seq++) + IDTAG; } while (byId.has(id) || (p === "w" && taken(id)));
+S.IDTAG = "";
+export function newId(p){
+  var id, taken = function(x){ for (var i = 0; i < S.wires.length; i++) if (S.wires[i].id === x) return true; return false; };
+  do { id = p + (S.seq++) + S.IDTAG; } while (byId.has(id) || (p === "w" && taken(id)));
   return id;
 }
 
-var TYPES = {
+export var TYPES = {
   /* A junction: both of its ports sit on the same dot, so wires meet it from
      any angle. One wire drives it, any number of wires carry the level onward —
      the way a 90° turn or a branch is made. x,y is the centre, not a corner. */
@@ -130,38 +131,46 @@ var TYPES = {
    fixed parts: u marks it as the shelf of areas you name and save yourself
    (see saveArea in edit.js). The other part types are still known to the
    bench, so a build that already uses one loads as it always did. */
-var CATS_C = [
+export var CATS_C = [
   {n:"Signals",     t:["SWITCH","BUTTON","CLOCK","HEXIN","LAMP","HEXD","SEG7"]},
   {n:"Gates",       t:["AND","OR","NOT","NAND","NOR","XOR","XNOR","BUF","TRI"]},
   {n:"Arithmetic",  t:["HADD","FADD","ADD4","CMP4","ALU"]},
   {n:"Electronics", t:[], u:1}
 ];
+/* the families a quantum build's console offers (the parts themselves are in quantum.js) */
+export var CATS_Q = [
+  {n:"Qubits",      t:["QUBIT","METER"]},
+  {n:"Gates",       t:["QH","QX","QY","QZ","QS","QT"]},
+  {n:"Multi-qubit", t:["QCX","QCZ","QSWAP","QCCX"]}
+];
 /* A build is classical or quantum, picked when it is started, and the console
    offers the parts of that kind only (the quantum ones are in quantum.js). */
-var CATS = CATS_C, docKind = "classical", kindSet = false, railCat = 0;
-var TIP_C = "Drag the bare sheet to move it — a circuit can run far past the window · click a port, then click another port to join them with a wire · Region (R) or Shift-drag boxes in an area to copy, Paste (P) drops it where you click · Cleaner (C) squares it all up";
-var TIP_Q = "Quantum build · every wire carries one qubit from a port to a port, and an output feeds one input only (a qubit cannot be copied) · click a qubit to start it as |0⟩ or |1⟩ · end a line on a Meter to read it out";
-function catKey(){ return "logicbench.cat" + (docKind === "quantum" ? ".q" : ""); }
-function tipShow(){ $("#tip").textContent = $("#tip").title = testMode ? TIP_TEST : TIP_EDIT; }
-function setKind(k){
+S.CATS = CATS_C; S.docKind = "classical"; var kindSet = false; S.railCat = 0;
+export var TIP_C = "Drag the bare sheet to move it — a circuit can run far past the window · click a port, then click another port to join them with a wire · Region (R) or Shift-drag boxes in an area to copy, Paste (P) drops it where you click · Cleaner (C) squares it all up";
+export var TIP_Q = "Quantum build · every wire carries one qubit from a port to a port, and an output feeds one input only (a qubit cannot be copied) · click a qubit to start it as |0⟩ or |1⟩ · end a line on a Meter to read it out";
+export function catKey(){ return "logicbench.cat" + (S.docKind === "quantum" ? ".q" : ""); }
+/* the one-line help in the bar */
+export function tipText(){ return S.testMode ? TIP_TEST : S.TIP_EDIT; }
+export function setKind(k){
   k = k === "quantum" ? "quantum" : "classical";
-  if (kindSet && k === docKind) return;
-  kindSet = true; docKind = k;
-  CATS = k === "quantum" ? CATS_Q : CATS_C;
-  TIP_EDIT = k === "quantum" ? TIP_Q : TIP_C;
-  document.documentElement.setAttribute("data-kind", k);
-  railCat = 0;
-  try { railCat = parseInt(localStorage.getItem(catKey()) || "0", 10) || 0; } catch (err) {}
-  clip = null; lastPaste = null;
-  tipShow();
-  buildRail();
-  HOST.kind(k);
+  if (kindSet && k === S.docKind) return;
+  kindSet = true; S.docKind = k;
+  S.CATS = k === "quantum" ? CATS_Q : CATS_C;
+  S.TIP_EDIT = k === "quantum" ? TIP_Q : TIP_C;
+  S.railCat = 0;
+  try { S.railCat = parseInt(localStorage.getItem(catKey()) || "0", 10) || 0; } catch (err) {}
+  S.clip = null; S.lastPaste = null;
+  notify();
 }
+/* How each kind of part past the plain gates is drawn, by its kind (TYPES[t].k):
+   DRAW[k](ctx, part, stub). symbols.js and quantum.js put their drawings in here. */
+export var DRAW = {};
+
 /* A chip is a box of named pins, PITCH apart, under a title row. Its size, and
    which inputs may be left open — a name ending "=0" or "=1" says what an open
    pin reads as — are worked out once, from the pin names. */
-var PITCH = 16, TITLE = 14, PINCH = 5.6;
-function defineChip(d){
+export var PITCH = 16; export var TITLE = 14; export var PINCH = 5.6;
+export function defineChip(d){
   var li = 0, lo = 0, rows;
   d.pd = []; d.pn = [];
   d.pi.forEach(function(s, i){
@@ -190,14 +199,14 @@ Object.keys(TYPES).forEach(function(t){ if (TYPES[t].k === "chip") defineChip(TY
    after the area and a fingerprint of what is in it, so two areas with one name
    but different insides are two different parts, and a build that uses one
    carries its insides along (see snapshot in js/builds.js). */
-function chipHash(s){
+export function chipHash(s){
   var h = 5381, i;
   for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);
 }
 /* the pins of a clip: which of its parts are inputs and which are outputs, in the
    order they stand, with a name for each that no other pin has */
-function chipPins(clip){
+export function chipPins(clip){
   var ins = [], outs = [], i, n;
   for (i = 0; i < clip.nodes.length; i++){
     n = clip.nodes[i];
@@ -221,12 +230,12 @@ function chipPins(clip){
     pi:name(ins, function(k){ return k < 26 ? String.fromCharCode(65 + k) : "I" + k; }),
     po:name(outs, function(k){ return "Q" + (k + 1); })};
 }
-function chipKey(name, clip){
+export function chipKey(name, clip){
   return "U:" + name + "#" + chipHash(JSON.stringify([clip.nodes.map(function(n){ return [n.t, n.x, n.y, n.l, n.s]; }),
     clip.wires.map(function(w){ return [w.a, w.q, w.b, w.p]; })]));
 }
 /* Make the type for a saved area and return its key; a key made before is reused. */
-function defineUserChip(name, clip){
+export function defineUserChip(name, clip){
   var key = chipKey(name, clip), p, d, li = 0, lo = 0, nameW;
   if (TYPES[key]) return key;
   p = chipPins(clip);
@@ -243,50 +252,50 @@ function defineUserChip(name, clip){
   return key;
 }
 
-var nodes = [], wires = [], seq = 1, pan = {x:0,y:0};
-var byId = new Map(), drag = null, wiring = null, panning = null, cascade = 0;
-var wireMode = false, pend = null, cursor = {x:0,y:0}, wend = null;
+S.nodes = []; S.wires = []; S.seq = 1; S.pan = {x:0,y:0};
+export var byId = new Map(); S.drag = null; S.wiring = null; S.panning = null; S.cascade = 0;
+S.wireMode = false; S.pend = null; S.cursor = {x:0,y:0}; S.wend = null;
 /* The selection is a set of parts and a set of wires rather than one item, so a
    whole region of the sheet can be boxed in, dragged, copied and pasted as one
    piece. marq is the rubber band while it is being drawn. */
-var pickN = new Set(), pickW = new Set(), marq = null, regionMode = false, hover = null;
-var clip = null, lastPaste = null, undoStack = [], space = false, pasteMode = false;
-var testMode = false, TIP_EDIT = TIP_C;
-var TIP_TEST = "Test mode — click the switches and buttons to drive the circuit · the sheet is locked · T or the Test button to edit again";
-var docName = "", docDirty = false;
-var dpr = 1, queued = false, dotPat = null, C = {};
-/* js/layout.js picks the layout before the page paints: "desktop" puts the rail
+export var pickN = new Set(); export var pickW = new Set(); S.marq = null; S.regionMode = false; S.hover = null;
+S.clip = null; S.lastPaste = null; S.undoStack = []; S.space = false; S.pasteMode = false;
+S.testMode = false; S.TIP_EDIT = TIP_C;
+export var TIP_TEST = "Test mode — click the switches and buttons to drive the circuit · the sheet is locked · T or the Test button to edit again";
+S.docName = ""; S.docDirty = false;
+S.dpr = 1; S.queued = false; var dotPat = null; S.C = {};
+/* src/layout-boot.js picks the layout before the page paints: "desktop" puts the rail
    down the left, "tablet" docks it along the bottom as a console */
-var LAYOUT = document.documentElement.getAttribute("data-layout") === "tablet" ? "tablet" : "desktop";
+S.LAYOUT = typeof document !== "undefined" && document.documentElement.getAttribute("data-layout") === "tablet" ? "tablet" : "desktop";
 /* the sheet's scale: the tablet layout draws everything half as big again by default */
-var ZDEF = LAYOUT === "tablet" ? 1.5 : 1, ZMIN = 0.5, ZMAX = 4, zoom = ZDEF;
+S.ZDEF = S.LAYOUT === "tablet" ? 1.5 : 1; export var ZMIN = 0.5; export var ZMAX = 4; S.zoom = S.ZDEF;
 
 /* ---------- colors ---------- */
-function readColors(){
+export function readColors(){
   var s = getComputedStyle(document.documentElement), i;
   var keys = ["line","grid","wire","fg","muted","panel","body","hot","accent","sel","canvas"];
-  for (i = 0; i < keys.length; i++) C[keys[i]] = s.getPropertyValue("--" + keys[i]).trim();
+  for (i = 0; i < keys.length; i++) S.C[keys[i]] = s.getPropertyValue("--" + keys[i]).trim();
   dotPat = null;
-  buildRail();
-  if ($("#home") && !$("#home").hidden) renderHome();
+  S.colorsRev++;
+  notify();
 }
-function dots(){
+export function dots(){
   if (dotPat) return dotPat;
   var c = document.createElement("canvas"), g = c.getContext("2d");
   c.width = c.height = GRID;
-  g.fillStyle = C.grid; g.beginPath(); g.arc(1, 1, 1.1, 0, 7); g.fill();
-  dotPat = ctx.createPattern(c, "repeat");
+  g.fillStyle = S.C.grid; g.beginPath(); g.arc(1, 1, 1.1, 0, 7); g.fill();
+  dotPat = S.ctx.createPattern(c, "repeat");
   return dotPat;
 }
 
 /* ---------- geometry ---------- */
-function nIn(n){ return TYPES[n.t].ins; }
-function nOut(n){ var d = TYPES[n.t]; return d.outs === undefined ? 1 : d.outs; }
-function isPt(n){ return TYPES[n.t].k === "pt"; }
+export function nIn(n){ return TYPES[n.t].ins; }
+export function nOut(n){ var d = TYPES[n.t]; return d.outs === undefined ? 1 : d.outs; }
+export function isPt(n){ return TYPES[n.t].k === "pt"; }
 /* How far down its part the i-th of count pins sits. A chip's pins are PITCH
    apart under the title, the shorter side centred against the longer; a symbol
    can pin its own (pyi, pyo); a gate spreads them evenly down its height. */
-function pinY(n, i, count, fixed){
+export function pinY(n, i, count, fixed){
   var d = TYPES[n.t], rows;
   if (d.k === "chip"){
     rows = Math.max(d.ins, nOut(n), 1);
@@ -295,19 +304,19 @@ function pinY(n, i, count, fixed){
   if (fixed && fixed[i] !== undefined) return n.y + fixed[i];
   return n.y + d.h * (i + 1) / (count + 1);
 }
-function inPort(n, i){
+export function inPort(n, i){
   if (isPt(n)) return {x:n.x, y:n.y};
   var d = TYPES[n.t]; return {x:n.x - STUB, y:pinY(n, i, d.ins, d.pyi)};
 }
 /* q is which output, on a part with more than one; left out, the first */
-function outPort(n, q){
+export function outPort(n, q){
   if (isPt(n)) return {x:n.x, y:n.y};
   var d = TYPES[n.t]; return {x:n.x + d.w + STUB, y:pinY(n, q | 0, nOut(n), d.pyo)};
 }
-function hasOut(n){ return nOut(n) > 0; }
+export function hasOut(n){ return nOut(n) > 0; }
 /* the level on output q, and whether that output has let go of its wire */
-function lvl(n, q){ return n.ov ? n.ov[q | 0] | 0 : n.v | 0; }
-function floats(n, q){ return !!n.od && n.od[q | 0] === 0; }
-function box(n){ var d = TYPES[n.t];
+export function lvl(n, q){ return n.ov ? n.ov[q | 0] | 0 : n.v | 0; }
+export function floats(n, q){ return !!n.od && n.od[q | 0] === 0; }
+export function box(n){ var d = TYPES[n.t];
   if (isPt(n)) return {x:n.x - PTR - 4, y:n.y - PTR - 4, w:(PTR + 4) * 2, h:(PTR + 4) * 2};
   return {x:n.x - (d.ins ? STUB : 0) - 2, y:n.y - 2, w:d.w + 4 + (d.ins ? STUB : 0) + (hasOut(n) ? STUB : 0), h:d.h + 4}; }

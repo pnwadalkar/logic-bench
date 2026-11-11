@@ -9,9 +9,7 @@
    Opened as the single offline file (file://), or from a plain static server with
    no /api, there is no server to talk to: accounts then live in this browser only,
    with a salted PBKDF2 password hash, as before. */
-"use strict";
-
-var Auth = (function(){
+export var Auth = (function(){
   var USERS = "logicbench.users", SESSION = "logicbench.session", CLAIMED = "logicbench.claimed";
   var CLOUD = "logicbench.cloud.user", SEEN = "logicbench.cloud.seen";
   var rawGet = function(k, d){

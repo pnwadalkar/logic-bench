@@ -1,17 +1,29 @@
 /* A small console API, for wiring from devtools. */
-"use strict";
+import { S, notify } from "./state.js";
+import { example, example2, libRead, load, renameBuild, saveBuild, saveCur, snapshot } from "./builds.js";
+import { cleanUp, playEnd, setTest, setWireMode } from "./cleaner.js";
+import { TYPES, byId, hasOut, lvl, nIn, nOut, pickN, pickW } from "./core.js";
+import { addNode, commit, connect, copyPick, pasteClip, selectAll, undo } from "./edit.js";
+import { newSheet } from "./home.js";
+import { exampleQ } from "./quantum.js";
+import { applyMarq, draw } from "./render.js";
+import { evaluate, picked, words } from "./sim.js";
+import { tickNow } from "./timing.js";
 
 /* ---------- console API ---------- */
 /* Wiring from devtools: bench.wire("A","Sum"), bench.add("NAND",300,120), bench.ports() */
-function findNode(ref){
+export function findNode(ref){
   if (!ref) return null;
   if (byId.get(ref)) return byId.get(ref);
   var i, s = String(ref).toLowerCase();
-  for (i = 0; i < nodes.length; i++) if ((nodes[i].l || "").toLowerCase() === s) return nodes[i];
-  for (i = 0; i < nodes.length; i++) if (nodes[i].t.toLowerCase() === s) return nodes[i];
+  for (i = 0; i < S.nodes.length; i++) if ((S.nodes[i].l || "").toLowerCase() === s) return S.nodes[i];
+  for (i = 0; i < S.nodes.length; i++) if (S.nodes[i].t.toLowerCase() === s) return S.nodes[i];
   return null;
 }
-window.bench = {
+export function installApi(){
+  window.bench = API;
+}
+var API = {
   /* bench.wire(from, to, inputIndex, outputIndex) — refs are a label ("A"), an id
      ("n3") or a type ("XOR"); the output index picks one of a chip's outputs */
   wire:function(from, to, port, out){
@@ -29,13 +41,13 @@ window.bench = {
   /* bench.parts() — every kind of part, by family */
   parts:function(){
     var o = {};
-    CATS.forEach(function(g){ o[g.n] = g.t.map(function(t){ return t + " (" + TYPES[t].n + ")"; }); });
+    S.CATS.forEach(function(g){ o[g.n] = g.t.map(function(t){ return t + " (" + TYPES[t].n + ")"; }); });
     return o;
   },
   /* bench.tick(n) — step time on n times at once: clocks, capacitors, inductors */
   tick:function(k){
     for (var i = 0; i < (k === undefined ? 1 : k | 0); i++) tickNow();
-    return nodes.filter(function(n){ return TYPES[n.t].tm; }).map(function(n){
+    return S.nodes.filter(function(n){ return TYPES[n.t].tm; }).map(function(n){
       return {id:n.id, type:n.t, out:n.v, charge:n.t === "CLOCK" ? undefined : n.m};
     });
   },
@@ -43,7 +55,7 @@ window.bench = {
   add:function(t, x, y){
     t = String(t || "").toUpperCase();
     if (!TYPES[t]) return "unknown part: " + t + " (" + Object.keys(TYPES).join(", ") + ")";
-    var n = addNode(t, x === undefined ? (120 - pan.x) / zoom : x, y === undefined ? (120 - pan.y) / zoom : y);
+    var n = addNode(t, x === undefined ? (120 - S.pan.x) / S.zoom : x, y === undefined ? (120 - S.pan.y) / S.zoom : y);
     commit();
     return {id:n.id, type:n.t, label:n.l, x:n.x, y:n.y};
   },
@@ -68,25 +80,25 @@ window.bench = {
   },
   /* bench.cut("A", "Sum") or bench.cut("w7") — drop a wire */
   cut:function(from, to){
-    var before = wires.length, a, b;
+    var before = S.wires.length, a, b;
     if (to === undefined){
-      wires = wires.filter(function(w){ return w.id !== from; });
+      S.wires = S.wires.filter(function(w){ return w.id !== from; });
     } else {
       a = findNode(from); b = findNode(to);
       if (!a || !b) return "no such part";
-      wires = wires.filter(function(w){ return !(w.a === a.id && w.b === b.id); });
+      S.wires = S.wires.filter(function(w){ return !(w.a === a.id && w.b === b.id); });
     }
     commit();
-    return (before - wires.length) + " wire(s) cut";
+    return (before - S.wires.length) + " wire(s) cut";
   },
   /* bench.ports() — what is on the sheet, with live values */
   ports:function(){
-    return nodes.map(function(n){
+    return S.nodes.map(function(n){
       return {id:n.id, type:n.t, label:n.l, out:n.v, outs:(n.ov || []).slice(), ins:nIn(n), x:n.x, y:n.y};
     });
   },
   list:function(){
-    return wires.map(function(w){
+    return S.wires.map(function(w){
       var a = w.a ? byId.get(w.a) : null, b = w.b ? byId.get(w.b) : null;
       return {id:w.id, from:(a && (a.l || a.t)) || "loose end",
         to:(b && (b.l || b.t)) || "loose end", output:w.q | 0, input:w.p, level:a ? lvl(a, w.q) : 0};
@@ -100,44 +112,44 @@ window.bench = {
   },
   all:function(){ selectAll(); return picked() + " picked"; },
   /* bench.copy() then bench.paste(x, y) — the copy lands centred on x,y */
-  copy:function(){ copyPick(false); return clip ? clip.nodes.length + " parts on the clipboard" : "nothing copied"; },
+  copy:function(){ copyPick(false); return S.clip ? S.clip.nodes.length + " parts on the clipboard" : "nothing copied"; },
   paste:function(x, y){
-    if (x !== undefined){ hover = {x:x, y:y}; pasteClip(); hover = null; }
+    if (x !== undefined){ S.hover = {x:x, y:y}; pasteClip(); S.hover = null; }
     else pasteClip();
     return pickN.size + " parts pasted";
   },
   /* bench.clean() — cleaner looks; bench.undo() puts it back */
-  clean:function(){ cleanUp(); return nodes.length + " parts · " + wires.length + " wires"; },
+  clean:function(){ cleanUp(); return S.nodes.length + " parts · " + S.wires.length + " wires"; },
   /* bench.steps(false) — clean in one jump instead of walking the passes */
   steps:function(on){
-    stepPlay = on === undefined ? !stepPlay : !!on;
-    if (!stepPlay) playEnd();
-    return stepPlay ? "the cleaner shows its passes" : "the cleaner lands in one go";
+    S.stepPlay = on === undefined ? !S.stepPlay : !!on;
+    if (!S.stepPlay) playEnd();
+    return S.stepPlay ? "the cleaner shows its passes" : "the cleaner lands in one go";
   },
-  undo:function(){ undo(); return nodes.length + " parts · " + wires.length + " wires"; },
+  undo:function(){ undo(); return S.nodes.length + " parts · " + S.wires.length + " wires"; },
   /* bench.save("name") / bench.open("name") / bench.builds() */
-  save:function(name){ if (name) docName = String(name); saveBuild(); return docName; },
+  save:function(name){ if (name) S.docName = String(name); saveBuild(); return S.docName; },
   open:function(name){
     var d = libRead()[name];
     if (!d) return "no build called " + name;
-    load(d); docName = name; docDirty = false; nameChip(); evaluate(); draw(); saveCur();
+    load(d); S.docName = name; S.docDirty = false; notify(); evaluate(); draw(); saveCur();
     return "opened " + name;
   },
   builds:function(){ return Object.keys(libRead()); },
   json:function(){ return snapshot(); },
-  load:function(d){ if (load(typeof d === "string" ? JSON.parse(d) : d)){ docDirty = true; commit(); return "loaded"; } return "nothing to load"; },
+  load:function(d){ if (load(typeof d === "string" ? JSON.parse(d) : d)){ S.docDirty = true; commit(); return "loaded"; } return "nothing to load"; },
   /* bench.example() — the half adder; bench.example("counter") — the clocked counter; bench.example("bell") — two entangled qubits */
-  example:function(which){ if (which === "counter") example2(); else if (which === "bell") exampleQ(); else example(); return docName; },
+  example:function(which){ if (which === "counter") example2(); else if (which === "bell") exampleQ(); else example(); return S.docName; },
   /* bench.kind() — "classical" or "quantum"; bench.fresh("quantum") — a new sheet of that kind */
-  kind:function(){ return docKind; },
-  fresh:function(kind){ newSheet(kind); return docKind; },
+  kind:function(){ return S.docKind; },
+  fresh:function(kind){ newSheet(kind); return S.docKind; },
   /* bench.outcomes() — on a quantum sheet, what the meters read together and how likely */
-  outcomes:function(){ evaluate(); return docKind === "quantum" ? JSON.parse(JSON.stringify(QRES)) : "not a quantum build"; },
-  name:function(s){ renameBuild(String(s || "")); return docName; },
-  mode:function(on){ setWireMode(on === undefined ? !wireMode : on); return wireMode ? "wire mode on" : "wire mode off"; },
+  outcomes:function(){ evaluate(); return S.docKind === "quantum" ? JSON.parse(JSON.stringify(S.QRES)) : "not a quantum build"; },
+  name:function(s){ renameBuild(String(s || "")); return S.docName; },
+  mode:function(on){ setWireMode(on === undefined ? !S.wireMode : on); return S.wireMode ? "wire mode on" : "wire mode off"; },
   /* bench.test() / bench.test(true) / bench.test(false) — lock the sheet and drive it */
   test:function(on){
-    setTest(on === undefined ? !testMode : on);
-    return testMode ? "test mode on — sheet locked, switches live" : "edit mode";
+    setTest(on === undefined ? !S.testMode : on);
+    return S.testMode ? "test mode on — sheet locked, switches live" : "edit mode";
   }
 };

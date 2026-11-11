@@ -1,19 +1,14 @@
 import { useState } from "react";
-import { useStore } from "../store.js";
-
-function pct(p) {
-  const v = p * 100;
-  return (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1)) + "%";
-}
+import { S } from "../bench/state.js";
+import { qPct } from "../bench/quantum.js";
 
 /* What the meters on a quantum sheet read, taken together: every outcome that can
    happen and how likely it is. Two qubits that are entangled show here as outcomes
    that only come in matching pairs, which no single meter can show. */
 export default function QuantumPanel() {
-  const kind = useStore((s) => s.kind);
-  const q = useStore((s) => s.quantum);
   const [open, setOpen] = useState(true);
-  if (kind !== "quantum" || !q) return null;
+  const q = S.QRES;
+  if (S.docKind !== "quantum" || !q) return null;
   return (
     <section id="qpanel" className={open ? "" : "shut"} aria-label="Measured outcomes">
       <button type="button" className="qhead" aria-expanded={open} onClick={() => setOpen(!open)}
@@ -35,7 +30,7 @@ export default function QuantumPanel() {
                   <li key={r.b}>
                     <code>|{r.b}⟩</code>
                     <span className="qbar"><span style={{ width: Math.max(1.5, r.p * 100) + "%" }}></span></span>
-                    <em>{pct(r.p)}</em>
+                    <em>{qPct(r.p)}</em>
                   </li>
                 ))}
               </ul>

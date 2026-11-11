@@ -3,12 +3,16 @@
    takes its place among the other entries by score. Entries are kept in this
    browser and shared by every account on it; "Share my entries" carries them to
    another device, where each is run through the checker again before it counts. */
-"use strict";
+import { S, flash, notify } from "./state.js";
+import { Auth } from "./auth.js";
+import { keepBuild, libRead, snapshot } from "./builds.js";
+import { judge } from "./checker.js";
+import { TYPES } from "./core.js";
 
 /* ---------- reference builds ---------- */
 /* A small way to write a circuit down: c.sw("A") is a switch, c.g("AND", x, y) a part
    wired from x and y, c.lamp("Sum", x) a lamp. x.o(1) is a part's second output. */
-function circuit(fn){
+export function circuit(fn){
   var ns = [], ws = [], k = 0;
   var put = function(t, l){ var n = {id:"n" + (++k), t:t, x:0, y:0, s:0, l:l || ""}; ns.push(n); return n; };
   var ref = function(n){ var r = {id:n.id, q:0}; r.o = function(q){ return {id:n.id, q:q}; }; return r; };
@@ -28,7 +32,7 @@ function circuit(fn){
 /* ---------- the challenges ---------- */
 /* ins and outs name the switches and lamps; f(inputs) gives the outputs the circuit must make.
    bots are the builds already in the Arena, each by someone who is not really there. */
-var CHALLENGES = [
+export var CHALLENGES = [
   {id:"half", name:"Half adder", level:"Easy", use:"gates", ins:["A","B"], outs:["Sum","Carry"],
     blurb:"Add two bits. Sum is A + B, and Carry is 1 when the answer needs a second bit.",
     f:function(v){ return [v[0] ^ v[1], v[0] & v[1]]; },
@@ -139,11 +143,11 @@ var CHALLENGES = [
         c.lamp("S2", f1.o(1)); c.lamp("S1", f1.o(0)); c.lamp("S0", f0.o(0)); }]
     ]}
 ];
-function chalById(id){
+export function chalById(id){
   for (var i = 0; i < CHALLENGES.length; i++) if (CHALLENGES[i].id === id) return CHALLENGES[i];
   return null;
 }
-function ruleText(ch){
+export function ruleText(ch){
   return ch.use === "chips"
     ? "Gates, electronic parts and the arithmetic and routing chips, except " +
       ch.ban.map(function(t){ return TYPES[t].n; }).join(", ") + "."
@@ -151,19 +155,19 @@ function ruleText(ch){
 }
 
 /* ---------- the standings ---------- */
-var ARENA_KEY = "logicbench.arena", BOT_AT = Date.UTC(2026, 0, 1);
-function arenaRead(){
+export var ARENA_KEY = "logicbench.arena"; export var BOT_AT = Date.UTC(2026, 0, 1);
+export function arenaRead(){
   try {
     var o = JSON.parse(localStorage.getItem(ARENA_KEY) || "{}");
     if (o && typeof o === "object" && o.entries && typeof o.entries === "object") return o;
   } catch (err) {}
   return {v:1, entries:{}};
 }
-function arenaWrite(o){
+export function arenaWrite(o){
   try { localStorage.setItem(ARENA_KEY, JSON.stringify(o)); return true; } catch (err) { return false; }
 }
-var botCache = {}, judgeCache = {};
-function botsOf(ch){
+export var botCache = {}; export var judgeCache = {};
+export function botsOf(ch){
   if (!botCache[ch.id]) botCache[ch.id] = ch.bots.map(function(b, i){
     var data = circuit(b[1]);
     return {id:"bot:" + b[0].toLowerCase(), name:b[0], bot:true, build:data, at:BOT_AT + i, rep:judge(data, ch)};
@@ -171,18 +175,18 @@ function botsOf(ch){
   return botCache[ch.id];
 }
 /* what the benchmark build scores: 1000 points is a build that matches it */
-function parOf(ch){
+export function parOf(ch){
   return botsOf(ch).reduce(function(m, b){ return b.rep.ok ? Math.min(m, b.rep.cost) : m; }, Infinity);
 }
-function pointsOf(ch, rep){ return Math.round(1000 * parOf(ch) / rep.cost); }
+export function pointsOf(ch, rep){ return Math.round(1000 * parOf(ch) / rep.cost); }
 /* An entry is run through the checker when it is read, not trusted from what was stored. */
-function judged(ch, id, e){
+export function judged(ch, id, e){
   var k = ch.id + "|" + id + "|" + e.at;
   if (!judgeCache[k]) judgeCache[k] = judge(e.build, ch);
   return judgeCache[k];
 }
 /* everyone who has entered a challenge, best first; a tie goes to whoever got there first */
-function standings(ch){
+export function standings(ch){
   var held = arenaRead().entries[ch.id] || {}, rows = botsOf(ch).slice();
   Object.keys(held).forEach(function(id){
     var e = held[id], rep = e && e.build ? judged(ch, id, e) : null;
@@ -193,7 +197,7 @@ function standings(ch){
   return rows;
 }
 /* every player across every challenge, by the points of their best builds */
-function leaders(){
+export function leaders(){
   var by = {}, out = [];
   CHALLENGES.forEach(function(ch){
     standings(ch).forEach(function(r){
@@ -209,7 +213,7 @@ function leaders(){
 
 /* Run a build against a challenge as the signed-in player. With save, a build that
    works is entered — unless the player already has a better one there. */
-function arenaTry(ch, data, save){
+export function arenaTry(ch, data, save){
   var me = Auth.current(), rep = judge(data, ch), rows, others, res = {rep:rep}, o;
   if (!rep.ok) return res;
   rows = standings(ch);
@@ -229,7 +233,7 @@ function arenaTry(ch, data, save){
 }
 
 /* ---------- sharing entries between devices ---------- */
-function exportEntries(){
+export function exportEntries(){
   var me = Auth.current(), o = arenaRead(), list = [], a, blob;
   CHALLENGES.forEach(function(ch){
     var e = (o.entries[ch.id] || {})[me.id];
@@ -245,7 +249,7 @@ function exportEntries(){
   flash("Saved " + list.length + " entr" + (list.length === 1 ? "y" : "ies") + " to share");
 }
 /* Every imported build is run through the checker; the score in the file is never read. */
-function importEntries(text){
+export function importEntries(text){
   var f = null, o = arenaRead(), added = 0, failed = 0, had = 0;
   try { f = JSON.parse(text); } catch (err) {}
   if (!f || f.app !== "logic-bench-arena" || !Array.isArray(f.entries)){ flash("That isn't an Arena entries file."); return; }
@@ -261,218 +265,31 @@ function importEntries(text){
     added++;
   });
   arenaWrite(o);
-  arenaDraw();
+  notify();
   flash(added + " entr" + (added === 1 ? "y" : "ies") + " added" + (failed ? " · " + failed + " didn't pass the checker" : "") +
     (had ? " · " + had + " already here" : ""));
 }
 
-/* ---------- the screen ---------- */
-var AR = {tab:"c", chal:null, res:null, pick:null};
-function dom(tag, cls, text){
-  var e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-function dot(r){
-  var d = dom("i", "pdot", (r.name || "?").charAt(0).toUpperCase());
-  d.style.background = r.bot ? "var(--muted)" : "hsl(" + r.color + ",55%,42%)";
-  return d;
-}
-function who(r, me){
-  var s = dom("span", "who");
-  s.appendChild(dot(r));
-  s.appendChild(dom("b", "", r.name));
-  if (r.bot) s.appendChild(dom("small", "tag", "bot"));
-  else if (me && r.id === me.id) s.appendChild(dom("small", "tag you", "you"));
-  return s;
-}
-function table(head, rows){
-  var t = dom("table", "tbl"), tr = dom("tr");
-  head.forEach(function(h){ tr.appendChild(dom("th", h.c, h.t)); });
-  t.appendChild(tr);
-  rows.forEach(function(r){
-    var row = dom("tr", r.cls);
-    r.cells.forEach(function(c, i){
-      var td = dom("td", head[i].c);
-      if (c && c.nodeType) td.appendChild(c); else td.textContent = c;
-      row.appendChild(td);
-    });
-    t.appendChild(row);
-  });
-  return t;
-}
-function arenaShow(){
+/* ---------- opening and closing ---------- */
+export function arenaShow(){
   keepBuild();
-  AR.res = null;
-  $("#arenaWho").textContent = Auth.current() ? Auth.current().name : "";
-  $("#arena").hidden = false;
-  arenaDraw();
-  $("#arena").scrollTop = 0;
+  S.arenaOpen = true;
+  notify();
 }
-function arenaClose(){ $("#arena").hidden = true; }
-
-function arenaDraw(){
-  var host = $("#aBody"), me = Auth.current(), mine;
-  if ($("#arena").hidden) return;
-  host.textContent = "";
-  mine = leaders().filter(function(p){ return me && p.id === me.id; })[0];
-  $("#aRate").textContent = mine ? mine.pts + " pts · #" + mine.rank + " of " + leaders().length : "No entries yet";
-  $("#aTabC").classList.toggle("on", AR.tab === "c");
-  $("#aTabR").classList.toggle("on", AR.tab === "r");
-  if (AR.tab === "r") viewRankings(host, me);
-  else if (AR.chal) viewChallenge(host, chalById(AR.chal), me);
-  else viewList(host, me);
-}
-
-function viewList(host, me){
-  var grid = dom("div", "chals");
-  CHALLENGES.forEach(function(ch){
-    var rows = standings(ch), mine = rows.filter(function(r){ return me && r.id === me.id; })[0], top = rows[0];
-    var b = dom("button", "chal"), tags = dom("div", "tags");
-    b.type = "button";
-    b.appendChild(dom("b", "", ch.name));
-    b.appendChild(dom("p", "", ch.blurb));
-    tags.appendChild(dom("span", "tg lv" + ch.level.charAt(0), ch.level));
-    tags.appendChild(dom("span", "tg", ch.ins.length + " in → " + ch.outs.length + " out"));
-    tags.appendChild(dom("span", "tg", ch.use === "chips" ? "chips allowed" : "gates only"));
-    b.appendChild(tags);
-    b.appendChild(dom("small", mine ? "mine" : "", mine
-      ? "You: #" + mine.rank + " of " + rows.length + " · " + mine.pts + " pts"
-      : "Not entered · " + rows.length + " entr" + (rows.length === 1 ? "y" : "ies") + (top ? " · best: " + top.name : "")));
-    b.addEventListener("click", function(){ AR.chal = ch.id; AR.res = null; AR.pick = null; arenaDraw(); $("#arena").scrollTop = 0; });
-    grid.appendChild(b);
+export function arenaClose(){ S.arenaOpen = false; notify(); }
+/* the builds that can be sent in: the sheet, if it is a classical one with parts
+   on it, then every saved classical build by name */
+export function arenaBuilds(){
+  var lib = libRead(), out = [];
+  if (S.nodes.length && S.docKind !== "quantum") out.push({v:"\u0001sheet", t:"On the sheet now — " + (S.docName || "Untitled")});
+  Object.keys(lib).sort().forEach(function(n){
+    if (!(S.nodes.length && n === S.docName) && lib[n].kind !== "quantum") out.push({v:"n:" + n, t:n});
   });
-  host.appendChild(dom("p", "sect", "Challenges"));
-  host.appendChild(grid);
-  host.appendChild(dom("p", "note", "Pick a challenge, build it on the sheet, and send it in. The checker runs every input pattern, then measures " +
-    "the size and the speed. Your best build for each challenge counts toward your rating."));
+  return out;
 }
-
-function viewRankings(host, me){
-  var list = leaders();
-  host.appendChild(dom("p", "sect", "Players · points from the best build in each challenge"));
-  host.appendChild(table(
-    [{t:"#", c:"n"}, {t:"Player"}, {t:"Solved", c:"n"}, {t:"First places", c:"n opt"}, {t:"Points", c:"n"}],
-    list.map(function(p){
-      return {cls:me && p.id === me.id ? "me" : "", cells:[p.rank, who(p, me), p.solved + " / " + CHALLENGES.length, p.golds, p.pts]};
-    })));
-  host.appendChild(dom("p", "note", "A challenge's benchmark build is worth 1000 points; a leaner build is worth more, a heavier one less."));
+/* Run the build picked in that list. Gives {ch, build, save, r}, or null if nothing is picked. */
+export function arenaRun(ch, v, save){
+  var data = v === "\u0001sheet" ? snapshot() : (v.indexOf("n:") === 0 ? libRead()[v.slice(2)] : null);
+  if (!data){ flash("Pick a build first."); return null; }
+  return {ch:ch.id, build:v === "\u0001sheet" ? (S.docName || "Untitled") : v.slice(2), save:save, r:arenaTry(ch, data, save)};
 }
-
-function viewChallenge(host, ch, me){
-  var rows = standings(ch), top = dom("div", "chTop"), cols = dom("div", "cols"), left = dom("div", "col"), right = dom("div", "col");
-  var back = dom("button", "", "← All challenges"), io = dom("div", "io");
-  back.type = "button";
-  back.addEventListener("click", function(){ AR.chal = null; AR.res = null; arenaDraw(); });
-  top.appendChild(back);
-  top.appendChild(dom("h2", "", ch.name));
-  top.appendChild(dom("span", "tg lv" + ch.level.charAt(0), ch.level));
-  host.appendChild(top);
-
-  /* the brief */
-  left.appendChild(dom("p", "sect", "The brief"));
-  left.appendChild(dom("p", "blurb", ch.blurb));
-  io.appendChild(dom("span", "k", "Switches"));
-  io.appendChild(dom("span", "v", ch.ins.join("  ")));
-  io.appendChild(dom("span", "k", "Lamps"));
-  io.appendChild(dom("span", "v", ch.outs.join("  ")));
-  io.appendChild(dom("span", "k", "Parts"));
-  io.appendChild(dom("span", "v", ruleText(ch)));
-  left.appendChild(io);
-  left.appendChild(dom("p", "note", "Name your switches and lamps as above (double-click a part to rename it), or just keep them in that order from top to bottom. " +
-    "Score = transistors + 4 × gate delays + ½ × wires; lower is better."));
-
-  /* send a build in */
-  left.appendChild(dom("p", "sect", "Send a build in"));
-  left.appendChild(submitBox(ch));
-
-  /* the board */
-  right.appendChild(dom("p", "sect", "Leaderboard"));
-  right.appendChild(table(
-    [{t:"#", c:"n"}, {t:"Player"}, {t:"Size", c:"n"}, {t:"Speed", c:"n"}, {t:"Wires", c:"n opt"}, {t:"Points", c:"n"}],
-    rows.map(function(r){
-      return {cls:me && r.id === me.id ? "me" : "", cells:[r.rank, who(r, me), r.rep.size + " T", r.rep.depth + " gd", r.rep.wires, r.pts]};
-    })));
-  right.appendChild(dom("p", "note", "Size is in transistors, speed in gate delays (the longest path from a switch to a lamp). " +
-    "Entries are re-checked every time this board is drawn."));
-  cols.appendChild(left); cols.appendChild(right);
-  host.appendChild(cols);
-}
-
-function submitBox(ch){
-  var box = dom("div", "submit"), sel = dom("select"), lib = libRead(), names = Object.keys(lib), go = dom("div", "acts");
-  var opt = function(v, t){ var o = dom("option", "", t); o.value = v; sel.appendChild(o); };
-  var check = dom("button", "", "Check"), send = dom("button", "key", "Submit to the Arena"), out = dom("div", "rep");
-  sel.setAttribute("aria-label", "Build to send in");
-  /* the challenges are classical logic: quantum builds are not offered */
-  if (nodes.length && docKind !== "quantum") opt("\u0001sheet", "On the sheet now — " + (docName || "Untitled"));
-  names.sort().forEach(function(n){ if (!(nodes.length && n === docName) && lib[n].kind !== "quantum") opt("n:" + n, n); });
-  if (!sel.options.length) opt("", "No builds yet — make one on the sheet first");
-  if (AR.pick && Array.prototype.some.call(sel.options, function(o){ return o.value === AR.pick; })) sel.value = AR.pick;
-  sel.addEventListener("change", function(){ AR.pick = sel.value; });
-  check.type = send.type = "button";
-  check.title = "Run the checker and see how this build would do — nothing is entered";
-  var run = function(save){
-    var v = sel.value, data = v === "\u0001sheet" ? snapshot() : (v.indexOf("n:") === 0 ? lib[v.slice(2)] : null);
-    if (!data){ flash("Pick a build first."); return; }
-    AR.pick = v;
-    AR.res = {ch:ch.id, build:v === "\u0001sheet" ? (docName || "Untitled") : v.slice(2), save:save, r:arenaTry(ch, data, save)};
-    if (save && AR.res.r.saved) { arenaDraw(); return; }
-    out.textContent = ""; out.appendChild(report(ch, AR.res));
-  };
-  check.addEventListener("click", function(){ run(false); });
-  send.addEventListener("click", function(){ run(true); });
-  go.appendChild(check); go.appendChild(send);
-  box.appendChild(sel); box.appendChild(go); box.appendChild(out);
-  if (AR.res && AR.res.ch === ch.id) out.appendChild(report(ch, AR.res));
-  return box;
-}
-
-/* what the checker found, in plain words */
-function report(ch, res){
-  var r = res.r, rep = r.rep, box = dom("div", "report " + (rep.ok ? "good" : "bad")), t, ul, names;
-  var list = function(a){ return a.slice(0, 4).map(function(x){ return x.name; }).join(", ") + (a.length > 4 ? " and " + (a.length - 4) + " more" : ""); };
-  box.appendChild(dom("b", "", "“" + res.build + "” — " + (rep.ok ? "works on all " + rep.total + " input patterns" : "doesn't pass")));
-  if (!rep.ok){
-    ul = dom("ul");
-    rep.errors.forEach(function(e){ ul.appendChild(dom("li", "", e)); });
-    box.appendChild(ul);
-    if (rep.miss.length){
-      t = table([{t:ch.ins.join(" ")}, {t:"Wanted " + ch.outs.join(" ")}, {t:"Got"}], rep.miss.map(function(m){
-        return {cells:[m.ins.join(" "), m.want.join(" "), m.got.join(" ")]};
-      }));
-      t.className += " mini";
-      box.appendChild(t);
-    }
-    return box;
-  }
-  box.appendChild(table([{t:"Size"}, {t:"Speed"}, {t:"Wires"}, {t:"Score"}, {t:"Points"}],
-    [{cells:[rep.size + " transistors", rep.depth + " gate delays", rep.wires, rep.cost.toFixed(1), r.pts]}]));
-  if (r.kept) box.appendChild(dom("p", "", "Not entered: your best here, #" + r.prev.rank + " (" + r.prev.pts + " pts), is as good or better."));
-  else box.appendChild(dom("p", "", (res.save ? "Entered — you are " : "Would take ") + "#" + r.rank + " of " + r.of + "."));
-  if (r.beat.length) box.appendChild(dom("p", "", "Ahead of " + list(r.beat) + "."));
-  if (r.lost.length) box.appendChild(dom("p", "", "Behind " + list(r.lost) + "."));
-  if (!res.save) box.appendChild(dom("p", "note", "This was only a check. Submit to the Arena to enter it."));
-  return box;
-}
-
-/* ---------- wiring ---------- */
-$("#btnArena").addEventListener("click", arenaShow);
-$("#hArena").addEventListener("click", arenaShow);
-$("#aBack").addEventListener("click", arenaClose);
-$("#aTabC").addEventListener("click", function(){ AR.tab = "c"; AR.chal = null; AR.res = null; arenaDraw(); });
-$("#aTabR").addEventListener("click", function(){ AR.tab = "r"; AR.chal = null; arenaDraw(); });
-$("#aExp").addEventListener("click", exportEntries);
-$("#aImp").addEventListener("click", function(){ $("#aFile").click(); });
-$("#aFile").addEventListener("change", function(){
-  var f = this.files && this.files[0], rd;
-  this.value = "";
-  if (!f) return;
-  rd = new FileReader();
-  rd.onload = function(){ importEntries(String(rd.result)); };
-  rd.readAsText(f);
-});
-window.addEventListener("keydown", function(e){
-  if (e.key === "Escape" && !$("#arena").hidden && $("#dlg").hidden) arenaClose();
-});

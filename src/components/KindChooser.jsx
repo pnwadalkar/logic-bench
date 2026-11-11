@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { store, useStore } from "../store.js";
+import { S, notify } from "../bench/state.js";
 
 const KINDS = [
   {
@@ -37,12 +37,11 @@ const KINDS = [
 /* Every new build starts here: classical or quantum? The parts console then
    offers the parts of that kind. Closing it without picking starts nothing. */
 export default function KindChooser() {
-  const chooser = useStore((s) => s.chooser);
   const first = useRef(null);
-  useEffect(() => { if (chooser && first.current) first.current.focus(); }, [chooser]);
-  if (!chooser) return null;
-  const close = () => store.set({ chooser: null });
-  const pick = (kind) => { close(); chooser.done(kind); };
+  useEffect(() => { if (first.current) first.current.focus(); }, []);
+  const done = S.chooser.done;
+  const close = () => { S.chooser = null; notify(); };
+  const pick = (kind) => { close(); done(kind); };
   return (
     <div id="kindDlg" role="dialog" aria-modal="true" aria-labelledby="kindT"
       onClick={(e) => { if (e.target === e.currentTarget) close(); }}

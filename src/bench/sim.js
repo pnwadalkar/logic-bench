@@ -1,8 +1,11 @@
 /* The logic itself, settled level by level, and the picked set of parts and wires. */
-"use strict";
+import { S, notify } from "./state.js";
+import { TYPES, byId, nIn, nOut, pickN, pickW } from "./core.js";
+import { keepMem } from "./edit.js";
+import { qSolve } from "./quantum.js";
 
 /* ---------- logic ---------- */
-function logic(t, a){
+export function logic(t, a){
   var x = a[0] | 0, y = a[1] | 0;
   switch (t){
     case "AND":  return x & y;
@@ -16,7 +19,7 @@ function logic(t, a){
   }
   return 0;
 }
-function reindex(){ byId.clear(); for (var i = 0; i < nodes.length; i++) byId.set(nodes[i].id, nodes[i]); }
+export function reindex(){ byId.clear(); for (var i = 0; i < S.nodes.length; i++) byId.set(S.nodes[i].id, S.nodes[i]); }
 
 /* ---------- drive ---------- */
 /* What an output puts on its wire is a drive, not just a level:
@@ -27,9 +30,9 @@ function reindex(){ byId.clear(); for (var i = 0; i < nodes.length; i++) byId.se
    which is simply the largest number. So a gate pulling low beats a pull-up
    resistor, and wires joined at a point still read high if any of them is high,
    the way they always have. A floating input reads as 0. */
-function hi(d){ return d === 2 || d === 4 ? 1 : 0; }
-function drv(v){ return v ? 4 : 3; }
-function resolve(list, ids){
+export function hi(d){ return d === 2 || d === 4 ? 1 : 0; }
+export function drv(v){ return v ? 4 : 3; }
+export function resolve(list, ids){
   var k, best = 0, n, d;
   if (!list) return 0;
   ids = ids || byId;
@@ -41,17 +44,17 @@ function resolve(list, ids){
   return best;
 }
 /* a word read off consecutive pins, lowest bit first, and back out again */
-function bits(a, from, k){ var v = 0, i; for (i = 0; i < k; i++) if (a[from + i]) v |= 1 << i; return v; }
-function outBits(v, k){ var o = [], i; for (i = 0; i < k; i++) o.push(drv((v >> i) & 1)); return o; }
-function words(n){
+export function bits(a, from, k){ var v = 0, i; for (i = 0; i < k; i++) if (a[from + i]) v |= 1 << i; return v; }
+export function outBits(v, k){ var o = [], i; for (i = 0; i < k; i++) o.push(drv((v >> i) & 1)); return o; }
+export function words(n){
   if (!Array.isArray(n.m) || n.m.length !== 16) n.m = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   return n.m;
 }
 /* n.m is a part's memory: a bit, a word, a charge, or sixteen words. */
-function bit(n){ return n.m ? 1 : 0; }
-function qq(n){ return [drv(bit(n)), drv(!bit(n))]; }
-var ALUOPS = ["ADD","SUB","AND","OR","XOR","NOT","INC","SHL"];
-function aluRun(x, y, op){
+export function bit(n){ return n.m ? 1 : 0; }
+export function qq(n){ return [drv(bit(n)), drv(!bit(n))]; }
+export var ALUOPS = ["ADD","SUB","AND","OR","XOR","NOT","INC","SHL"];
+export function aluRun(x, y, op){
   switch (op){
     case 0: return x + y;
     case 1: return x + ((~y) & 15) + 1;      /* Cout 1 means no borrow */
@@ -68,7 +71,7 @@ function aluRun(x, y, op){
    a (open pins already read as their default) and the raw drives d. A part with
    memory reads it here and changes it only when it is level-triggered; an edge
    is taken in EDGE below, once the whole sheet has settled. */
-var RULE = {
+export var RULE = {
   VCC:   function(){ return [4]; },
   GND:   function(){ return [3]; },
   RES:   function(n, a, d){ return [d[0] === 0 ? 0 : hi(d[0]) ? 2 : 1]; },
@@ -119,7 +122,7 @@ var RULE = {
 };
 /* What an edge-triggered part holds after a rising edge on its clock pin, from
    the levels its inputs had settled at just before it. */
-var EDGE = {
+export var EDGE = {
   DFF:  function(n, a){ return a[2] ? 0 : a[0]; },
   JKFF: function(n, a){
     if (a[3]) return 0;
@@ -141,7 +144,7 @@ var EDGE = {
   }
 };
 /* One part's outputs from its inputs' drives. */
-function outputs(n, d){
+export function outputs(n, d){
   var t = TYPES[n.t], a = [], j;
   if (n.t === "SWITCH" || n.t === "BUTTON") return [drv(n.s)];
   if (n.t === "POINT") return [d[0]];       /* a junction hands on whatever reaches it */
@@ -153,7 +156,7 @@ function outputs(n, d){
   return [drv(logic(n.t, a))];
 }
 /* Iterative settle: bounded passes, so a feedback loop can never spin the CPU. */
-function settle(src, ns, ids){
+export function settle(src, ns, ids){
   var i, j, n, d, o, pass, changed, k;
   for (pass = 0; pass < 64; pass++){
     changed = false;
@@ -172,7 +175,7 @@ function settle(src, ns, ids){
    on the part so a flip-flop in there goes on holding what it holds. The chip's
    switches and buttons become junctions that its input pins feed, and its lamps
    become junctions that its output pins read from — so inside, it is just wires. */
-function chipInside(n){
+export function chipInside(n){
   var t = TYPES[n.t], c = t.clip, s = n.sub, pre = n.id + "/";
   if (s && s.key === n.t) return s;
   s = n.sub = {key:n.t, nodes:[], wires:[], ins:[], outs:[]};
@@ -195,7 +198,7 @@ function chipInside(n){
    what is inside settles, and takes its clock edges, together with everything
    else — exactly as if it had been drawn there. A chip that holds a chip is
    opened too, a few levels down. */
-function flatten(ns, ws, depth){
+export function flatten(ns, ws, depth){
   var outN = [], outW = [], map = {}, i, n, s, r, w, a, q, b, p;
   for (i = 0; i < ns.length; i++){
     n = ns[i];
@@ -216,8 +219,8 @@ function flatten(ns, ws, depth){
 }
 /* Settle the sheet and return how many inputs are left open. The screen is not
    touched, so the arena's checker can run a circuit that is not on the sheet. */
-function solve(){
-  var flat = flatten(nodes, wires, 0), ns = flat.ns, ws = flat.ws, ids = new Map(), src = new Map();
+export function solve(){
+  var flat = flatten(S.nodes, S.wires, 0), ns = flat.ns, ws = flat.ws, ids = new Map(), src = new Map();
   var i, j, n, w, s, round, fire, next, t, c;
   for (i = 0; i < ns.length; i++) ids.set(ns[i].id, ns[i]);
   for (i = 0; i < ws.length; i++){
@@ -254,8 +257,8 @@ function solve(){
     n.v = nOut(n) ? n.ov[0] : (n.iv[0] | 0);
   }
   /* a chip you made shows what its pins are doing: read off the junctions behind them */
-  for (i = 0; i < nodes.length; i++){
-    n = nodes[i];
+  for (i = 0; i < S.nodes.length; i++){
+    n = S.nodes[i];
     if (!TYPES[n.t].user || !n.sub) continue;
     n.iv = n.sub.ins.map(function(id){ var p = ids.get(id); return p ? p.iv[0] | 0 : 0; });
     n.od = n.sub.outs.map(function(id){ var p = ids.get(id); return p && p.od ? p.od[0] | 0 : 0; });
@@ -263,43 +266,37 @@ function solve(){
     n.v = nOut(n) ? n.ov[0] : 0;
   }
   var open = 0;
-  for (i = 0; i < nodes.length; i++){
-    t = TYPES[nodes[i].t];
-    for (j = 0; j < nIn(nodes[i]); j++)
-      if (src.get(nodes[i].id + ":" + j) === undefined && !(t.pd && t.pd[j] !== undefined)) open++;
+  for (i = 0; i < S.nodes.length; i++){
+    t = TYPES[S.nodes[i].t];
+    for (j = 0; j < nIn(S.nodes[i]); j++)
+      if (src.get(S.nodes[i].id + ":" + j) === undefined && !(t.pd && t.pd[j] !== undefined)) open++;
   }
   return open;
 }
-var qShown = false;
-function evaluate(){
-  var q = docKind === "quantum", open = q ? qSolve() : solve();
-  if (q || qShown){ qShown = q; HOST.quantum(q ? QRES : null); }
-  $("#count").textContent = nodes.length + " parts · " + wires.length + " wires" +
-    (q ? " · " + QRES.n + " qubit" + (QRES.n === 1 ? "" : "s") : "") +
+/* Settle the sheet — as logic levels, or as a quantum state — and let the page know. */
+export function evaluate(){
+  S.open = S.docKind === "quantum" ? qSolve() : solve();
+  notify();
+}
+/* the count in the bar: what is on the sheet, what is still open, what is picked */
+export function countText(){
+  var open = S.open;
+  return S.nodes.length + " parts · " + S.wires.length + " wires" +
+    (S.docKind === "quantum" ? " · " + S.QRES.n + " qubit" + (S.QRES.n === 1 ? "" : "s") : "") +
     (open ? " · " + open + " open input" + (open > 1 ? "s" : "") : "") +
     (picked() ? " · " + picked() + " selected" : "");
-  $("#count").classList.toggle("warn", open > 0);
-  pickDel();
-  nameChip();
-}
-function nameChip(){
-  var el = $("#docname");
-  /* never yank the text out from under someone mid-rename */
-  if (document.activeElement !== el) el.value = docName;
-  $("#dot").classList.toggle("on", docDirty);
 }
 
 /* ---------- selection ---------- */
-function clearPick(){ pickN.clear(); pickW.clear(); }
-function pickOne(k, id){ clearPick(); if (k === "n") pickN.add(id); else pickW.add(id); }
-function picked(){ return pickN.size + pickW.size; }
-function pickDel(){ $("#btnDel").disabled = testMode || !picked(); }
-function pickNodes(){ return nodes.filter(function(n){ return pickN.has(n.id); }); }
+export function clearPick(){ pickN.clear(); pickW.clear(); }
+export function pickOne(k, id){ clearPick(); if (k === "n") pickN.add(id); else pickW.add(id); }
+export function picked(){ return pickN.size + pickW.size; }
+export function pickNodes(){ return S.nodes.filter(function(n){ return pickN.has(n.id); }); }
 /* Every wire whose two ends both sit on picked parts belongs to the picked block,
    whether the band happened to cross it or not. */
-function pickSpread(){
-  for (var i = 0; i < wires.length; i++){
-    var w = wires[i];
+export function pickSpread(){
+  for (var i = 0; i < S.wires.length; i++){
+    var w = S.wires[i];
     if (w.a && w.b && pickN.has(w.a) && pickN.has(w.b)) pickW.add(w.id);
   }
 }

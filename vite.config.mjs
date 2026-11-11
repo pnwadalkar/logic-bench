@@ -15,37 +15,6 @@ import { fileURLToPath } from "node:url";
 const root = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 
-/* The circuit engine is a set of scripts that share one scope, in this order.
-   They are joined into one module, `virtual:engine`, whose startEngine(HOST) runs
-   them once the React shell has put the page on screen. HOST is the way back into
-   React: the project-kind chooser, the quantum panel, the kind badge. */
-const ENGINE = ["auth.js", "core.js", "collab.js", "shapes.js", "symbols.js", "sim.js", "quantum.js", "render.js",
-  "edit.js", "cleaner.js", "input.js", "rail.js", "builds.js", "timing.js", "api.js", "home.js", "login.js",
-  "checker.js", "arena.js", "fullscreen.js", "main.js"];
-function engine() {
-  const id = "virtual:engine", rid = "\0" + id, dir = path.join(root, "src", "engine");
-  return {
-    name: "logic-bench-engine",
-    resolveId(s) { return s === id ? rid : null; },
-    load(i) {
-      if (i !== rid) return null;
-      const parts = ENGINE.map((f) => {
-        const p = path.join(dir, f);
-        this.addWatchFile(p);
-        return `/* ---- ${f} ---- */\n` + fs.readFileSync(p, "utf8");
-      });
-      return `export function startEngine(HOST){\n"use strict";\n${parts.join("\n")}\n}\n`;
-    },
-    handleHotUpdate({ file, server }) {
-      if (path.dirname(file) !== dir) return;
-      const mod = server.moduleGraph.getModuleById(rid);
-      if (mod) server.moduleGraph.invalidateModule(mod);
-      server.ws.send({ type: "full-reload" });
-      return [];
-    }
-  };
-}
-
 /* The layout (laptop or tablet) has to be picked before the first paint, so the
    little script that picks it goes into the page itself, ahead of everything. */
 function layoutBoot() {
@@ -123,7 +92,7 @@ function singleFile() {
 export default defineConfig(({ mode }) => {
   const single = mode === "single";
   return {
-    plugins: [react(), engine(), layoutBoot(), apiRoutes()].concat(single ? [viteSingleFile(), singleFile()] : [serviceWorker()]),
+    plugins: [react(), layoutBoot(), apiRoutes()].concat(single ? [viteSingleFile(), singleFile()] : [serviceWorker()]),
     publicDir: single ? false : "public",
     define: { __SINGLE_FILE__: JSON.stringify(single) },
     build: {

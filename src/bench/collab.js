@@ -11,9 +11,18 @@
    What each person's simulation is doing (flip-flops, RAM, a clock's phase)
    stays on their own screen; the circuit, labels, switches and ROMs are shared.
    Needs the website: the offline single file has no server to share through. */
-"use strict";
+import { S, flash, notify } from "./state.js";
+import { Auth } from "./auth.js";
+import { graphOf, snapshot } from "./builds.js";
+import { setTest } from "./cleaner.js";
+import { TYPES, box, byId, nOut, pickN, pickW, setKind } from "./core.js";
+import { keepMem } from "./edit.js";
+import { zoomFit } from "./input.js";
+import { draw, sizeCanvas } from "./render.js";
+import { roundRect } from "./shapes.js";
+import { clearPick, evaluate, reindex } from "./sim.js";
 
-var Collab = (function(){
+export var Collab = (function(){
   var CLIENT = (function(){
     var a = new Uint8Array(6), s = "", i;
     if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
@@ -40,8 +49,8 @@ var Collab = (function(){
   }
   function here(){
     var n = new Map(), w = new Map(), i;
-    for (i = 0; i < nodes.length; i++) n.set(nodes[i].id, canonN(nodes[i]));
-    for (i = 0; i < wires.length; i++) w.set(wires[i].id, canonW(wires[i]));
+    for (i = 0; i < S.nodes.length; i++) n.set(S.nodes[i].id, canonN(S.nodes[i]));
+    for (i = 0; i < S.wires.length; i++) w.set(S.wires[i].id, canonW(S.wires[i]));
     return {n:n, w:w};
   }
   function toMap(o){ var m = new Map(); Object.keys(o || {}).forEach(function(k){ m.set(k, o[k]); }); return m; }
@@ -50,7 +59,7 @@ var Collab = (function(){
   function putN(id, text){
     var o, n, i;
     if (text == null){
-      for (i = 0; i < nodes.length; i++) if (nodes[i].id === id){ nodes.splice(i, 1); break; }
+      for (i = 0; i < S.nodes.length; i++) if (S.nodes[i].id === id){ S.nodes.splice(i, 1); break; }
       byId.delete(id); pickN.delete(id);
       return;
     }
@@ -60,7 +69,7 @@ var Collab = (function(){
     if (!n || n.t !== o.t){
       if (n) putN(id, null);
       n = {id:id, t:o.t, x:0, y:0, v:0, s:0, l:"", iv:[]};
-      nodes.push(n); byId.set(id, n);
+      S.nodes.push(n); byId.set(id, n);
     }
     n.x = +o.x || 0; n.y = +o.y || 0; n.l = o.l || "";
     if (typeof o.c === "number") n.c = o.c; else delete n.c;
@@ -69,16 +78,16 @@ var Collab = (function(){
   }
   function putW(id, text){
     var o, i, w;
-    for (i = 0; i < wires.length; i++) if (wires[i].id === id) break;
-    if (text == null){ if (i < wires.length) wires.splice(i, 1); pickW.delete(id); return; }
+    for (i = 0; i < S.wires.length; i++) if (S.wires[i].id === id) break;
+    if (text == null){ if (i < S.wires.length) S.wires.splice(i, 1); pickW.delete(id); return; }
     try { o = JSON.parse(text); } catch (err) { return; }
     w = {id:id, a:o.a || null, q:o.a ? o.q | 0 : 0, b:o.b || null, p:o.p | 0,
       fa:o.a ? null : (o.fa ? {x:+o.fa.x, y:+o.fa.y} : null), fb:o.b ? null : (o.fb ? {x:+o.fb.x, y:+o.fb.y} : null)};
-    if (i < wires.length) wires[i] = w; else wires.push(w);
+    if (i < S.wires.length) S.wires[i] = w; else S.wires.push(w);
   }
   /* a wire whose part was deleted by someone else goes too (and that goes up as a change) */
   function prune(){
-    wires = wires.filter(function(w){
+    S.wires = S.wires.filter(function(w){
       var a = w.a ? byId.get(w.a) : null, b = w.b ? byId.get(w.b) : null;
       return (w.a ? a && nOut(a) > (w.q | 0) : !!w.fa) && (w.b ? !!b : !!w.fb);
     });
@@ -128,8 +137,8 @@ var Collab = (function(){
     if (sent.count) me.lastLocal = Date.now();
     sel = []; pickN.forEach(function(id){ if (sel.length < 80) sel.push(id); });
     body = {action:"sync", id:me.id, since:me.rev, client:CLIENT, patch:{n:sent.n, w:sent.w},
-      here:{x:hover ? hover.x : null, y:hover ? hover.y : null,
-        on:!!hover && document.visibilityState !== "hidden" && $("#home").hidden && $("#arena").hidden, sel:sel}};
+      here:{x:S.hover ? S.hover.x : null, y:S.hover ? S.hover.y : null,
+        on:!!S.hover && document.visibilityState !== "hidden" && !S.homeOpen && !S.arenaOpen, sel:sel}};
     me.busy = true;
     return fetch("/api/projects", {method:"POST", credentials:"same-origin", cache:"no-store", keepalive:!!keepalive && JSON.stringify(body).length < 60000,
       headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}).then(function(res){
@@ -209,7 +218,7 @@ var Collab = (function(){
       reindex(); prune(); reindex();
       evaluate();
     }
-    docDirty = diff(here(), 1).count > 0; nameChip();
+    S.docDirty = diff(here(), 1).count > 0; notify();
     draw();
   }
 
@@ -218,23 +227,23 @@ var Collab = (function(){
     var parse = function(m){ var a = []; m.forEach(function(v){ try { a.push(JSON.parse(v)); } catch (err) {} }); return a; };
     var base = {n:toMap(n), w:toMap(w)}, g;
     if (P) stop(true);
-    if (testMode) setTest(false);
+    if (S.testMode) setTest(false);
     P = {id:project.id, project:project, rev:rev, base:base, busy:false, timer:0, peers:[], seen:{},
       marks:new Map(), clock:0, lastLocal:0, lastRemote:0, status:"live"};
-    IDTAG = "." + CLIENT;
-    undoStack = [];
+    S.IDTAG = "." + CLIENT;
+    S.undoStack = [];
     if (!keepSheet){
       setKind(project.kind);
       g = graphOf({nodes:parse(base.n), wires:parse(base.w)});
-      nodes = g.nodes; wires = g.wires;
-      clearPick(); pend = null; wiring = null; marq = null; cascade = 0;
+      S.nodes = g.nodes; S.wires = g.wires;
+      clearPick(); S.pend = null; S.wiring = null; S.marq = null; S.cascade = 0;
       reindex();
       sizeCanvas(); zoomFit();
     }
-    seq = Math.max(seq, 1);
-    docName = project.name; docDirty = false;
+    S.seq = Math.max(S.seq, 1);
+    S.docName = project.name; S.docDirty = false;
     try { localStorage.setItem(Auth.key("project"), project.id); } catch (err) {}
-    nameChip(); evaluate(); draw();
+    notify(); evaluate(); draw();
     tell();
     step();
   }
@@ -245,7 +254,7 @@ var Collab = (function(){
     clearTimeout(me.timer);
     me.busy = false;
     var flush = step(true);
-    P = null; IDTAG = ""; undoStack = [];
+    P = null; S.IDTAG = ""; S.undoStack = [];
     try { localStorage.removeItem(Auth.key("project")); } catch (err) {}
     if (!quiet) tell();
     return flush;
@@ -259,7 +268,7 @@ var Collab = (function(){
     P.peers.forEach(function(h){
       var col = hue(h.color), i, n, b;
       c.save();
-      c.strokeStyle = col; c.lineWidth = 2 / zoom; c.setLineDash([5 / zoom, 3 / zoom]);
+      c.strokeStyle = col; c.lineWidth = 2 / S.zoom; c.setLineDash([5 / S.zoom, 3 / S.zoom]);
       for (i = 0; i < (h.sel || []).length; i++){
         n = byId.get(h.sel[i]);
         if (!n) continue;
@@ -272,7 +281,7 @@ var Collab = (function(){
       h.dx += (h.x - h.dx) * 0.25; h.dy += (h.y - h.dy) * 0.25;
       if (Math.abs(h.x - h.dx) + Math.abs(h.y - h.dy) > 0.5) moving = true; else { h.dx = h.x; h.dy = h.y; }
       c.save();
-      c.translate(h.dx, h.dy); c.scale(1 / zoom, 1 / zoom);
+      c.translate(h.dx, h.dy); c.scale(1 / S.zoom, 1 / S.zoom);
       c.fillStyle = col; c.strokeStyle = "#fff"; c.lineWidth = 1.5;
       c.beginPath(); c.moveTo(0, 0); c.lineTo(0, 15); c.lineTo(4, 11); c.lineTo(8, 18); c.lineTo(10.5, 17); c.lineTo(6.5, 10); c.lineTo(12, 10); c.closePath();
       c.stroke(); c.fill();
@@ -297,7 +306,7 @@ var Collab = (function(){
     list:function(){ return api(null).then(function(d){ return d.projects || []; }); },
     /* A new project. With fromSheet, what is on the sheet now becomes its start. */
     create:function(name, fromSheet, kind){
-      return api({action:"create", name:name, kind:fromSheet ? docKind : kind}).then(function(d){
+      return api({action:"create", name:name, kind:fromSheet ? S.docKind : kind}).then(function(d){
         begin(d.project, 0, {}, {}, !!fromSheet);
         return d.project;
       });
@@ -316,7 +325,7 @@ var Collab = (function(){
       if (!P) return Promise.resolve();
       var id = P.id;
       return api({action:"rename", id:id, name:name}).then(function(d){
-        if (P && P.id === id){ P.project = d.project; docName = d.project.name; nameChip(); tell(); }
+        if (P && P.id === id){ P.project = d.project; S.docName = d.project.name; notify(); tell(); }
         return d.project;
       });
     },
