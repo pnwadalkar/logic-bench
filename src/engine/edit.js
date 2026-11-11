@@ -12,6 +12,10 @@ function autoLabel(t){
     for (i = 0; i < nodes.length; i++) if (nodes[i].t === "SWITCH" || nodes[i].t === "BUTTON") c++;
     return c < 26 ? String.fromCharCode(65 + c) : "S" + (c + 1);
   }
+  if (t === "QUBIT" || t === "METER"){
+    for (i = 0; i < nodes.length; i++) if (nodes[i].t === t) c++;
+    return (t === "QUBIT" ? "q" : "m") + c;
+  }
   return "";
 }
 function addNode(t, x, y){
@@ -41,11 +45,15 @@ function connect(a, b){
   /* already wired exactly this way: no second line on top of the first */
   if (wires.some(function(w){ return w.a === o.id && (w.q | 0) === (o.p | 0) && w.b === i.id && w.p === i.p; })) return false;
   takeInput(i, null);
+  /* a qubit cannot be copied: a quantum output feeds one input, so a fresh wire
+     from it takes the place of the one that was there */
+  if (docKind === "quantum") wires = wires.filter(function(w){ return !(w.a === o.id && (w.q | 0) === (o.p | 0)); });
   wires.push({id:newId("w"), a:o.id, q:o.p | 0, b:i.id, p:i.p});
   return true;
 }
-/* Drop the far end of a wire on bare sheet. The wire is real and editable;
-   it simply carries nothing until the loose end lands on a port. */
+/* A wire with one end on bare sheet. The bench no longer makes these — a wire
+   runs from a port to a port, see noWire in input.js — but builds saved before
+   that rule still hold some, and their loose ends can still be dragged home. */
 function loose(ph, p){
   var w = {id:newId("w"), a:null, q:0, b:null, p:0, fa:null, fb:null};
   var q = {x:Math.round(p.x / SNAP) * SNAP, y:Math.round(p.y / SNAP) * SNAP};
@@ -109,6 +117,7 @@ function pushUndo(){
 function restore(d){
   if (!d) return false;
   if (!d.nodes || !d.nodes.length){
+    setKind(d.kind);
     nodes = []; wires = []; clearPick(); pend = null; wiring = null; wend = null;
     pan = d.pan && typeof d.pan.x === "number" ? {x:d.pan.x, y:d.pan.y} : pan;
     reindex(); return true;
@@ -127,7 +136,7 @@ function undo(){
 /* ---------- copy & paste ---------- */
 /* A copy is kept as plain data measured from its own top-left corner, so it can
    be dropped anywhere, any number of times, with the original left untouched. */
-var AUTO = /^(?:[A-Z]|Q\d+|S\d+)$/;      /* a label the bench handed out itself */
+var AUTO = /^(?:[A-Z]|Q\d+|S\d+|q\d+|m\d+)$/;      /* a label the bench handed out itself */
 function clipFrom(){
   var ns = pickNodes(), idx = new Map(), i, b, w, lo, hi;
   for (i = 0; i < ns.length; i++) idx.set(ns[i].id, i);
@@ -150,6 +159,7 @@ function clipFrom(){
   }
   var rel = function(p){ return p ? {x:p.x - lo.x, y:p.y - lo.y} : null; };
   return {
+    kind:docKind,
     w:hi.x - lo.x, h:hi.y - lo.y, ox:lo.x, oy:lo.y,
     nodes:ns.map(function(n){
       return {t:n.t, x:n.x - lo.x, y:n.y - lo.y, s:n.s | 0, l:n.l || "", c:n.c, m:keepMem(n.m)};
@@ -193,6 +203,7 @@ function pasteSpot(where){
 function pasteClip(where){
   if (testMode) return;
   if (!clip){ flash("Nothing copied yet — box in an area and press Copy."); return; }
+  if ((clip.kind || "classical") !== docKind){ flash("That copy came from a " + (clip.kind || "classical") + " build — it can't go on a " + docKind + " sheet."); return; }
   pushUndo();
   var at = pasteSpot(where), made = [], i, cn, n, cw, w;
   for (i = 0; i < clip.nodes.length; i++){
@@ -318,7 +329,7 @@ function areaNames(){
 }
 function showShelf(){
   for (var i = 0; i < CATS.length; i++) if (CATS[i].u) railCat = i;
-  try { localStorage.setItem(CATKEY, String(railCat)); } catch (err) {}
+  try { localStorage.setItem(catKey(), String(railCat)); } catch (err) {}
   buildRail();
 }
 /* A saved area is a chip: the part type made from it, made the first time it is
@@ -330,6 +341,7 @@ function areaKey(name, a){
 }
 function saveArea(){
   if (testMode) return;
+  if (docKind === "quantum"){ flash("Chips are made from classical builds — a quantum area can be copied and pasted instead."); return; }
   if (!pickN.size){ flash("Nothing picked — drag a box round the part of the circuit you want."); return; }
   var c = clipFrom();
   if (!c){ flash("Nothing to save there."); return; }

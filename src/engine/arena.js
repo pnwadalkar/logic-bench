@@ -405,8 +405,9 @@ function submitBox(ch){
   var opt = function(v, t){ var o = dom("option", "", t); o.value = v; sel.appendChild(o); };
   var check = dom("button", "", "Check"), send = dom("button", "key", "Submit to the Arena"), out = dom("div", "rep");
   sel.setAttribute("aria-label", "Build to send in");
-  if (nodes.length) opt("\u0001sheet", "On the sheet now — " + (docName || "Untitled"));
-  names.sort().forEach(function(n){ if (!(nodes.length && n === docName)) opt("n:" + n, n); });
+  /* the challenges are classical logic: quantum builds are not offered */
+  if (nodes.length && docKind !== "quantum") opt("\u0001sheet", "On the sheet now — " + (docName || "Untitled"));
+  names.sort().forEach(function(n){ if (!(nodes.length && n === docName) && lib[n].kind !== "quantum") opt("n:" + n, n); });
   if (!sel.options.length) opt("", "No builds yet — make one on the sheet first");
   if (AR.pick && Array.prototype.some.call(sel.options, function(o){ return o.value === AR.pick; })) sel.value = AR.pick;
   sel.addEventListener("change", function(){ AR.pick = sel.value; });

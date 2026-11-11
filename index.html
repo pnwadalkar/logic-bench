@@ -3,198 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="description" content="Logic Bench — build and test circuits from switches, gates, transistors, chips and memory, all the way up to the parts of a computer.">
+<meta name="description" content="Logic Bench — build and test classical circuits from switches, gates, chips and memory, and quantum circuits from qubits, gates and meters.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#161a22" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Logic Bench">
 <title>Logic Bench</title>
-<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<link rel="manifest" href="manifest.webmanifest">
-<!-- picks the layout (rail on the left, or the console along the bottom) before anything paints -->
-<script src="js/layout.js"></script>
-<link rel="preload" href="assets/fonts/ibm-plex-mono-500.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/fonts.css">
-<link rel="stylesheet" href="css/base.css">
-<link rel="stylesheet" href="css/desktop.css">
-<link rel="stylesheet" href="css/tablet.css">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- picks the layout (laptop or tablet) before anything paints: src/layout-boot.js, put here by vite.config.mjs -->
+<!--layout-boot-->
 </head>
 <body>
-<div id="app">
-  <header>
-    <div class="bar">
-      <h1>Logic <em>Bench</em></h1>
-      <input id="docname" maxlength="40" spellcheck="false" placeholder="Untitled"
-        aria-label="Build name" title="The build's name — type over it to rename">
-      <span id="dot" aria-hidden="true" title="Unsaved changes">•</span>
-      <span id="crew" hidden>
-        <span id="crewLive" class="live" title="Shared project"></span>
-        <span id="crewPpl" aria-label="Who is here"></span>
-        <button id="btnInvite" type="button" title="Invite people to build on this sheet with you">Invite</button>
-      </span>
-      <span id="tip">Drag the bare sheet to move it — a circuit can run far past the window · click a port, then click anywhere to drop the wire · Region (R) or Shift-drag boxes in an area to copy, Paste (P) drops it where you click · Cleaner (C) squares it all up</span>
-      <span class="spacer"></span>
-      <span id="count"></span>
-      <button id="btnFull" type="button" title="Full screen, turned sideways">Full screen</button>
-      <button id="btnArena" type="button" title="Send a build in against a challenge and see where it ranks">Arena</button>
-      <button id="btnHome" type="button" title="All your builds, as cards to pick from">Home</button>
-      <button id="btnSave" type="button" title="Name this build and save it (Ctrl+S)">Save</button>
-      <button id="btnNew" type="button" title="Start a fresh sheet — the one you are on is kept">New</button>
-      <button id="btnEg" type="button">Example</button>
-      <button id="btnClean" type="button" title="Cleaner looks: lay the circuit out in columns, keep the inputs in the order you drew them, gather the lamps in one column down the right-hand edge, straighten every wire, square the corners and squeeze out the dead space (C)">Cleaner</button>
-      <button id="btnDel" type="button">Delete</button>
-      <button id="btnTest" type="button" title="Lock the sheet and drive it with the switches (T)">Test</button>
-      <button id="btnUser" class="user" type="button" hidden><i id="userDot" aria-hidden="true"></i><span id="userName"></span></button>
-    </div>
-  </header>
-  <div id="main">
-    <aside id="rail">
-      <div class="gp"><p class="grp">Tools</p>
-      <div class="set" id="setT"></div></div>
-      <div class="gp" id="gpParts"><p class="grp">Parts</p>
-      <div class="cats" id="cats" role="tablist" aria-label="Part families"></div>
-      <div class="set" id="setP" role="tabpanel"></div></div>
-    </aside>
-    <div id="stage">
-      <canvas id="cv"></canvas>
-      <input id="ren" hidden maxlength="8" spellcheck="false" aria-label="Rename part">
-      <div id="steps" role="status" aria-live="polite" hidden></div>
-      <div id="toast" role="status" aria-live="polite"></div>
-      <div id="zoom" role="group" aria-label="Zoom">
-        <button type="button" id="zOut" title="Zoom out (-)" aria-label="Zoom out">−</button>
-        <button type="button" id="zPct" title="Back to the normal size (0)">100%</button>
-        <button type="button" id="zIn" title="Zoom in (+)" aria-label="Zoom in">+</button>
-        <button type="button" id="zFit" title="Fit the whole circuit on the screen">Fit</button>
-      </div>
-      <div id="pick" hidden role="toolbar" aria-label="Picked area">
-        <span id="pickWhat"></span>
-        <button type="button" data-a="save" title="Turn this circuit into a black chip: its switches become the inputs, its lamps the outputs. It goes on the Electronics tab, to drag out whenever you like">Save as chip</button>
-        <button type="button" data-a="copy" title="Copy the boxed-in area (Ctrl+C)">Copy</button>
-        <button type="button" data-a="cut" title="Cut the boxed-in area (Ctrl+X)">Cut</button>
-        <button type="button" data-a="dup" title="Drop a copy beside it">Duplicate</button>
-        <button type="button" data-a="del" title="Delete the boxed-in area (Del)">Delete</button>
-        <button type="button" data-a="off" class="x" title="Let the area go (Esc)" aria-label="Let the area go">✕</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="home" hidden>
-  <div class="wrap">
-    <div class="homeTop">
-      <h1>Logic <em>Bench</em></h1>
-      <p>Signed in as <b id="homeWho"></b> · pick a build to work on.</p>
-    </div>
-    <div class="homeAct">
-      <button id="hNew" class="key" type="button">New build</button>
-      <button id="hArena" type="button" title="Challenges, rankings and the checker">Arena</button>
-      <button id="hEg" type="button">Half adder example</button>
-      <button id="hEg2" type="button" title="A clock driving a counter, read out on a hex display">Counter example</button>
-      <button id="hSave" type="button" title="Download every build as one file, to keep safe or carry to another device">Back up all</button>
-      <button id="hLoad" type="button" title="Bring builds back in from a backup file">Restore</button>
-      <input id="hFile" type="file" accept=".json,application/json" hidden>
-      <span class="spacer"></span>
-      <button id="hBack" type="button" hidden>Back to the sheet</button>
-    </div>
-    <div id="shBox">
-      <p class="sect">Shared projects · build one circuit together, live</p>
-      <div class="homeAct">
-        <button id="shNew" type="button" title="Start an empty sheet that others can join and build on with you">New shared project</button>
-        <button id="shFrom" type="button" title="Turn the sheet you have open into a shared project">Share the sheet I'm on</button>
-        <form id="shJoin" class="join" autocomplete="off">
-          <input id="shCode" maxlength="8" spellcheck="false" autocapitalize="characters" placeholder="Invite code" aria-label="Invite code">
-          <button type="submit">Join</button>
-        </form>
-      </div>
-      <div id="shared"></div>
-      <p id="shNote" class="note"></p>
-    </div>
-    <p class="sect">Your builds</p>
-    <div id="cards"></div>
-    <p id="homeNote">Your builds are kept on this device and need no internet. Save asks for a name · tap a card to open it · Back up all downloads every build as one file you can Restore here or on another device.</p>
-  </div>
-</div>
-
-<div id="arena" hidden>
-  <div class="wrap">
-    <div class="homeTop">
-      <h1>Logic <em>Arena</em></h1>
-      <p>Playing as <b id="arenaWho"></b> · <span id="aRate"></span></p>
-    </div>
-    <div class="homeAct">
-      <button id="aBack" class="key" type="button">Back</button>
-      <button id="aTabC" class="tab on" type="button">Challenges</button>
-      <button id="aTabR" class="tab" type="button">Rankings</button>
-      <span class="spacer"></span>
-      <button id="aExp" type="button" title="Download your entries as one file to hand to someone on another device">Share my entries</button>
-      <button id="aImp" type="button" title="Bring in someone else's entries. Each one is run through the checker again">Import entries</button>
-      <input id="aFile" type="file" accept=".json,application/json" hidden>
-    </div>
-    <div id="aBody"></div>
-  </div>
-</div>
-
-<div id="login" hidden>
-  <main class="loginCard">
-    <h1>Logic <em>Bench</em></h1>
-    <h2 id="loginT">Welcome back</h2>
-    <p id="loginS" class="sub"></p>
-    <div class="tabs" role="tablist">
-      <button class="tab on" id="tabIn" type="button" role="tab" aria-selected="true">Sign in</button>
-      <button class="tab" id="tabUp" type="button" role="tab" aria-selected="false">Create account</button>
-    </div>
-    <form id="loginForm" novalidate autocomplete="on">
-      <label class="field"><span>Username</span>
-        <input id="luser" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" required>
-      </label>
-      <label class="field"><span>Password</span>
-        <span class="pw">
-          <input id="lpw" name="password" type="password" autocomplete="current-password" minlength="6" required>
-          <button type="button" id="leye" aria-label="Show password">Show</button>
-        </span>
-      </label>
-      <label class="field" id="pw2Row" hidden><span>Confirm password</span>
-        <input id="lpw2" type="password" autocomplete="new-password" minlength="6">
-      </label>
-      <p id="loginErr" role="alert"></p>
-      <button class="key wide" id="loginGo" type="submit">Sign in</button>
-    </form>
-    <p class="fine" id="loginFine"></p>
-  </main>
-</div>
-
-<div id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgT">
-  <form id="dlgBox" autocomplete="off">
-    <p id="dlgT"></p>
-    <p id="dlgM"></p>
-    <input id="dlgIn" maxlength="40" spellcheck="false" aria-labelledby="dlgT">
-    <p id="dlgErr" role="alert"></p>
-    <div class="dlgAct"><button type="button" id="dlgNo">Cancel</button><button type="submit" id="dlgOk" class="key">OK</button></div>
-  </form>
-</div>
-
-<!-- classic scripts sharing one scope, in dependency order; main.js boots the bench -->
-<script src="js/auth.js"></script>
-<script src="js/core.js"></script>
-<script src="js/collab.js"></script>
-<script src="js/shapes.js"></script>
-<script src="js/symbols.js"></script>
-<script src="js/sim.js"></script>
-<script src="js/render.js"></script>
-<script src="js/edit.js"></script>
-<script src="js/cleaner.js"></script>
-<script src="js/input.js"></script>
-<script src="js/rail.js"></script>
-<script src="js/builds.js"></script>
-<script src="js/timing.js"></script>
-<script src="js/api.js"></script>
-<script src="js/home.js"></script>
-<script src="js/login.js"></script>
-<script src="js/checker.js"></script>
-<script src="js/arena.js"></script>
-<script src="js/fullscreen.js"></script>
-<script src="js/main.js"></script>
-<script src="js/offline.js"></script>
+<div id="root"></div>
+<script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

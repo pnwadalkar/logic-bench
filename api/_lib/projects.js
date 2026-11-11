@@ -91,7 +91,7 @@ async function summary(pid, m) {
   m = m || await meta(pid);
   if (!m) return null;
   const [mem, parts, rev] = await Promise.all([members(pid), kv().hlen(K(pid, "n")), kv().get(K(pid, "rev"))]);
-  return { id: pid, name: m.name, owner: m.owner, code: m.code, created: m.created, members: mem, parts: parts, rev: Number(rev || 0) };
+  return { id: pid, name: m.name, kind: m.kind === "quantum" ? "quantum" : "classical", owner: m.owner, code: m.code, created: m.created, members: mem, parts: parts, rev: Number(rev || 0) };
 }
 async function needMember(user, pid) {
   if (!await kv().hexists(K(pid, "mem"), user.id)) throw new HttpError(404, "That project is gone, or you are not in it.");
@@ -113,7 +113,7 @@ async function list(user) {
 }
 
 /* A new project, empty or started from a sheet (a change set of its parts and wires). */
-async function create(user, name, start) {
+async function create(user, name, start, kind) {
   return guard(async function () {
     name = cleanName(name);
     const patch = cleanPatch(start);
@@ -126,6 +126,7 @@ async function create(user, name, start) {
     }
     if (!code) throw new HttpError(503, "Could not make an invite code. Try again.");
     const m = { id: pid, name: name, owner: user.id, created: Date.now(), code: code };
+    if (kind === "quantum") m.kind = "quantum";   /* a project is classical or quantum for good */
     await kv().set(K(pid, "meta"), JSON.stringify(m));
     await kv().hset(K(pid, "mem"), { [user.id]: memberRow(user) });
     const n = {}, w = {};

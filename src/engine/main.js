@@ -2,7 +2,7 @@
 "use strict";
 
 /* ---------- boot ---------- */
-$("#tip").title = TIP_EDIT;
+setKind("classical");
 /* Keep the page exactly as tall as what can be seen. On a tablet the browser bar
    comes and goes mid-drag; the visual viewport is the one height that always
    tells the truth, and the page is scrolled back to the top whenever the browser
@@ -44,8 +44,12 @@ function boot(hot){
   }
   if (!ok && !Object.keys(libRead()).length){
     /* a new account has nothing yet: straight onto a bare sheet, ready to build */
-    newSheet(); enterBench();
+    newSheet("classical"); enterBench();
     flash("Welcome, " + Auth.current().name + " · drag a part in from the console below");
+    /* the first build starts with the same question every new build does */
+    HOST.chooseKind(function(kind){
+      if (kind === "quantum"){ newSheet(kind); flash("New quantum sheet · drag a qubit in from the console below"); }
+    });
     sharedOnBoot();
     return;
   }

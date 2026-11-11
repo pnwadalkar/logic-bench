@@ -224,6 +224,7 @@ var Collab = (function(){
     IDTAG = "." + CLIENT;
     undoStack = [];
     if (!keepSheet){
+      setKind(project.kind);
       g = graphOf({nodes:parse(base.n), wires:parse(base.w)});
       nodes = g.nodes; wires = g.wires;
       clearPick(); pend = null; wiring = null; marq = null; cascade = 0;
@@ -295,8 +296,8 @@ var Collab = (function(){
     clock:function(){ return P ? P.clock : 0; },
     list:function(){ return api(null).then(function(d){ return d.projects || []; }); },
     /* A new project. With fromSheet, what is on the sheet now becomes its start. */
-    create:function(name, fromSheet){
-      return api({action:"create", name:name}).then(function(d){
+    create:function(name, fromSheet, kind){
+      return api({action:"create", name:name, kind:fromSheet ? docKind : kind}).then(function(d){
         begin(d.project, 0, {}, {}, !!fromSheet);
         return d.project;
       });

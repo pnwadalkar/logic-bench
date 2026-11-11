@@ -48,6 +48,7 @@ setInterval(tick, TICK);
 function tapPart(n){
   if (n.t === "SWITCH") n.s = n.s ? 0 : 1;
   else if (n.t === "HEXIN") n.s = ((n.s | 0) + 1) & 15;
+  else if (n.t === "QUBIT") n.s = n.s ? 0 : 1;
   else if (n.t === "CLOCK"){
     n.c = RATES[(RATES.indexOf(rate(n)) + 1) % RATES.length]; n.ta = 0;
     flash("Clock · " + (n.c ? rateText(n.c) : "stopped — click it again to start it"));

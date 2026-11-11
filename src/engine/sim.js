@@ -270,9 +270,12 @@ function solve(){
   }
   return open;
 }
+var qShown = false;
 function evaluate(){
-  var open = solve();
+  var q = docKind === "quantum", open = q ? qSolve() : solve();
+  if (q || qShown){ qShown = q; HOST.quantum(q ? QRES : null); }
   $("#count").textContent = nodes.length + " parts · " + wires.length + " wires" +
+    (q ? " · " + QRES.n + " qubit" + (QRES.n === 1 ? "" : "s") : "") +
     (open ? " · " + open + " open input" + (open > 1 ? "s" : "") : "") +
     (picked() ? " · " + picked() + " selected" : "");
   $("#count").classList.toggle("warn", open > 0);

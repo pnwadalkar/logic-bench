@@ -126,8 +126,13 @@ window.bench = {
   builds:function(){ return Object.keys(libRead()); },
   json:function(){ return snapshot(); },
   load:function(d){ if (load(typeof d === "string" ? JSON.parse(d) : d)){ docDirty = true; commit(); return "loaded"; } return "nothing to load"; },
-  /* bench.example() — the half adder; bench.example("counter") — the clocked counter */
-  example:function(which){ if (which === "counter") example2(); else example(); return docName; },
+  /* bench.example() — the half adder; bench.example("counter") — the clocked counter; bench.example("bell") — two entangled qubits */
+  example:function(which){ if (which === "counter") example2(); else if (which === "bell") exampleQ(); else example(); return docName; },
+  /* bench.kind() — "classical" or "quantum"; bench.fresh("quantum") — a new sheet of that kind */
+  kind:function(){ return docKind; },
+  fresh:function(kind){ newSheet(kind); return docKind; },
+  /* bench.outcomes() — on a quantum sheet, what the meters read together and how likely */
+  outcomes:function(){ evaluate(); return docKind === "quantum" ? JSON.parse(JSON.stringify(QRES)) : "not a quantum build"; },
   name:function(s){ renameBuild(String(s || "")); return docName; },
   mode:function(on){ setWireMode(on === undefined ? !wireMode : on); return wireMode ? "wire mode on" : "wire mode off"; },
   /* bench.test() / bench.test(true) / bench.test(false) — lock the sheet and drive it */

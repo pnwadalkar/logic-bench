@@ -99,6 +99,8 @@ function railIcon(t){
     d.w = save.w; d.h = save.h;
   } else if (d.k === "chip"){
     chipIcon(g, t);
+  } else if (d.k === "qmulti"){
+    qMultiIcon(g, d);
   } else if (DRAW[d.k]){
     /* a component drawn as it is on the sheet, shrunk to fit the tile */
     var lead = (d.ins ? s : 0) + s, k = Math.min(1, 42 / (d.w + lead), 28 / d.h);
@@ -140,7 +142,7 @@ function buildRail(){
       evaluate(); draw();
     };
   };
-  item($("#setT"), "POINT", "Point", pointIcon(), spawn("POINT"));
+  if (docKind !== "quantum") item($("#setT"), "POINT", "Point", pointIcon(), spawn("POINT"));
   /* a mode, so a finger can box in a region too — a finger otherwise pans */
   item($("#setT"), "REGION", "Region", regionIcon(), function(e){
     e.preventDefault(); if (!testMode) setRegionMode(!regionMode);
@@ -150,7 +152,7 @@ function buildRail(){
   item($("#setT"), "PASTE", "Paste", pasteIcon(), function(e){
     e.preventDefault(); if (!testMode) setPasteMode(!pasteMode);
   }, "Put the copied area down where you click (P) — Ctrl+V drops it under the pointer instead");
-  item($("#setT"), "CLEAN", "Cleaner", cleanIcon(), function(e){
+  if (docKind !== "quantum") item($("#setT"), "CLEAN", "Cleaner", cleanIcon(), function(e){
     e.preventDefault(); cleanUp();
   }, "Cleaner looks: lay the circuit out in columns, keep the inputs in the order you drew them, gather the lamps in one column down the right-hand edge, straighten every wire, square the corners and squeeze out the dead space (C)");
   /* The parts come in families, one tab each, so the rail stays short enough to
@@ -158,7 +160,7 @@ function buildRail(){
   var cats = $("#cats"), set = $("#setP");
   var show = function(k){
     railCat = k;
-    try { localStorage.setItem(CATKEY, String(k)); } catch (err) {}
+    try { localStorage.setItem(catKey(), String(k)); } catch (err) {}
     Array.prototype.forEach.call(cats.children, function(b, i){
       b.classList.toggle("on", i === k); b.setAttribute("aria-selected", i === k ? "true" : "false");
     });
@@ -201,5 +203,5 @@ function shelf(set, item){
     el.appendChild(x);
   });
 }
-var CATKEY = "logicbench.cat", railCat = 0;
-try { railCat = parseInt(localStorage.getItem(CATKEY) || "0", 10) || 0; } catch (err) {}
+/* which tab the console is on (railCat, declared in core.js), remembered per kind of build */
+try { railCat = parseInt(localStorage.getItem(catKey()) || "0", 10) || 0; } catch (err) {}

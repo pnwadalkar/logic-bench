@@ -101,7 +101,7 @@ function drawPart(c, n, stub){
     if (d.k === "pt"){ c.textAlign = "left"; c.fillText(n.l, n.x + PTR + 6, n.y - PTR - 3); }
     else if (d.k === "lamp"){ c.textAlign = "left"; c.fillText(n.l, n.x + w + 7, n.y + h / 2); }
     /* a chip has pins down its left side, so its name goes over the top */
-    else if (d.k === "chip"){ c.textAlign = "left"; c.fillText(n.l, n.x, n.y - 8); }
+    else if (d.k === "chip" || (d.qm && d.ins)){ c.textAlign = "left"; c.fillText(n.l, n.x, n.y - 8); }
     else { c.textAlign = "right"; c.fillText(n.l, n.x - stub - 5, n.y + h / 2); }
   }
 }

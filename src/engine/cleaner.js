@@ -1005,6 +1005,7 @@ function layOrphans(list){
 /* The cleaner moves parts and adds corners, so it keeps the sheet it started
    from for Ctrl+Z. */
 function cleanUp(sure){
+  if (docKind === "quantum"){ flash("The Cleaner lays out classical builds only, for now."); return; }
   if (testMode) return;
   if (!nodes.length){ flash("Nothing on the sheet to clean up yet."); return; }
   if (Collab.active() && sure !== true && Collab.peers().length){
@@ -1138,7 +1139,7 @@ function setTest(on){
   $("#rail").classList.toggle("lock", testMode);
   pickDel();
   $("#btnClean").disabled = testMode;
-  $("#tip").textContent = $("#tip").title = testMode ? TIP_TEST : TIP_EDIT;
+  tipShow();
   cv.style.cursor = cursorFor();
   draw();
 }

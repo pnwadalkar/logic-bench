@@ -37,14 +37,15 @@ const ctx = {
   requestAnimationFrame: () => 0, cancelAnimationFrame(){},
   getComputedStyle: () => ({ getPropertyValue: () => "#000" }),
   clearTimeout(){}, setTimeout: () => 0,
+  HOST: { kind(){}, quantum(){}, chooseKind(){} },
   Collab: { active: () => false, peers: () => [], clock: () => 0, mergeUndo: (d) => d },
   console
 };
 ctx.window = ctx;
 vm.createContext(ctx);
 const run = (code) => vm.runInContext(code, ctx);
-const load = (f) => run(fs.readFileSync(path.join(root, "js", f), "utf8"));
-["core.js", "shapes.js", "symbols.js", "sim.js", "render.js", "edit.js", "cleaner.js", "builds.js"].forEach(load);
+const load = (f) => run(fs.readFileSync(path.join(root, "src", "engine", f), "utf8"));
+["core.js", "shapes.js", "symbols.js", "sim.js", "quantum.js", "render.js", "edit.js", "cleaner.js", "builds.js"].forEach(load);
 
 /* the harness's own helpers, living inside the bench's global scope */
 run(`

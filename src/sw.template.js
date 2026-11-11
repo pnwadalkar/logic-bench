@@ -1,45 +1,11 @@
-/* Keeps Logic Bench working with no connection. Every file is served from the
-   cache straight away and refreshed from the network behind it, so a deploy
-   reaches the device on the next visit. Bump VERSION when files are added or removed. */
+/* Keeps Logic Bench working with no connection. Every file of the build is kept
+   on the device, served from there straight away and refreshed from the network
+   behind it, so a deploy reaches the device on the next visit.
+   vite.config.mjs fills in the version and the file list at build time. */
 "use strict";
 
-var VERSION = "logic-bench-v9";
-var FILES = [
-  "./",
-  "index.html",
-  "manifest.webmanifest",
-  "assets/icon.svg",
-  "assets/fonts/ibm-plex-mono-400.woff2",
-  "assets/fonts/ibm-plex-mono-500.woff2",
-  "assets/fonts/ibm-plex-mono-600.woff2",
-  "assets/fonts/ibm-plex-sans.woff2",
-  "css/fonts.css",
-  "css/base.css",
-  "css/desktop.css",
-  "css/tablet.css",
-  "js/layout.js",
-  "js/auth.js",
-  "js/core.js",
-  "js/collab.js",
-  "js/shapes.js",
-  "js/symbols.js",
-  "js/sim.js",
-  "js/render.js",
-  "js/edit.js",
-  "js/cleaner.js",
-  "js/input.js",
-  "js/rail.js",
-  "js/builds.js",
-  "js/timing.js",
-  "js/api.js",
-  "js/home.js",
-  "js/login.js",
-  "js/checker.js",
-  "js/arena.js",
-  "js/fullscreen.js",
-  "js/main.js",
-  "js/offline.js"
-];
+var VERSION = "__VERSION__";
+var FILES = __FILES__;
 
 self.addEventListener("install", function(e){
   e.waitUntil(caches.open(VERSION).then(function(c){ return c.addAll(FILES); }).then(function(){ return self.skipWaiting(); }));

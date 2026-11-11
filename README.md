@@ -5,9 +5,13 @@ built from — gates, adders, an ALU, decoders, flip-flops, registers, counters,
 up on an endless sheet. No install, and it keeps working offline. You sign in once with a username and
 password, build, and then send your builds into the **Arena** to see how they rank.
 
+Every new build starts with one question: **classical or quantum?** A classical build gets the
+switches, gates, chips and memory; a quantum build gets qubits, quantum gates and meters, and a live
+panel of what the meters read. The app is React on Vite; the sheet itself is drawn on a canvas.
+
 ## One app, two layouts
 
-The layout is chosen by the device, once, before the page paints (`js/layout.js`):
+The layout is chosen by the device, once, before the page paints (`src/layout-boot.js`):
 
 | Device | Layout |
 | --- | --- |
@@ -43,14 +47,37 @@ Capacitors charge and drain over time, more slowly through a resistor, and hold 
 (slowly leaking) while their input floats, which is how a DRAM bit works. Inductors lag behind
 their input. Flip-flops, registers, counters and RAM act on the rising edge of their clock.
 
-**Chips** have named pins. A pin name ending in `=0` or `=1` in `js/core.js` may be left open
+**Chips** have named pins. A pin name ending in `=0` or `=1` in `src/engine/core.js` may be left open
 and reads as that value; EN pins left open count as on. Double-click a RAM or ROM to read or
 program its sixteen words as hex digits. Click a Hex input to count it on.
 
+## Quantum builds
+
+Pick **Quantum** when you start a build and the console offers these instead:
+
+| Tab | Parts |
+| --- | --- |
+| Qubits | **Qubit** (starts as |0⟩; click it for |1⟩), **Meter** |
+| Gates | Hadamard **H**, Pauli **X**, **Y**, **Z**, phase **S**, **T** |
+| Multi-qubit | **CNOT**, **CZ**, **SWAP**, **Toffoli** |
+
+A wire carries one qubit. An output feeds one input only — a qubit cannot be copied — so a second
+wire from the same output replaces the first. A gate runs once a qubit reaches every one of its
+inputs. Wires and leads are tinted by how likely the qubit is to read 1: grey for 0, lit for 1,
+in between for a superposition, and broken where no qubit arrives.
+
+The **Outcomes** panel lists what the meters read together, top to bottom, and how likely each
+result is. That is where entanglement shows: the Bell pair example (Home → *Bell pair example*)
+reads 00 half the time and 11 the other half, and never 01 or 10. The simulator is an exact
+state-vector one (`src/engine/quantum.js`), for up to 10 qubits. The Cleaner, saved chips and the
+Arena are for classical builds.
+
 ## Features
 
-- Drag parts from the rail; click a port, then click anywhere to drop a wire
-- Half adder and clocked counter examples on the Home page
+- Every wire runs **from a port to a port**. Let go of one over bare sheet and no wire is made
+
+- Drag parts from the console; click a port, then click another port to join them with a wire (or drag from one to the other)
+- Half adder, clocked counter and Bell pair examples on the Home page
 - Region select, copy / cut / paste / duplicate, undo
 - **Cleaner** squares the whole circuit up into tidy columns, step by step
 - **Test** mode locks the sheet so you can drive it with the switches
@@ -61,7 +88,7 @@ program its sixteen words as hex digits. Click a Hex input to count it on.
 
 ## Accounts
 
-Nothing opens until you are signed in (`js/auth.js`, `js/login.js`). Create an account the first time,
+Nothing opens until you are signed in (`src/engine/auth.js`, `src/engine/login.js`). Create an account the first time,
 sign in after that, and the session is remembered, so you can carry on building offline.
 
 - **On the website** accounts live on the server (`api/`, Vercel Functions). Passwords are kept as
@@ -83,7 +110,7 @@ sign in after that, and the session is remembered, so you can carry on building 
 ## Shared projects
 
 Several people build one circuit on one sheet at the same time — one on the adder, another on the
-subtractor, all on the same CPU (`js/collab.js`, `api/projects.js`, `api/_lib/projects.js`).
+subtractor, all on the same CPU (`src/engine/collab.js`, `api/projects.js`, `api/_lib/projects.js`).
 
 - **Home → Shared projects**: *New shared project* starts an empty shared sheet; *Share the sheet I'm
   on* starts one from what is open; *Join* takes an invite code. **Invite** (on the card, or in the top
@@ -119,7 +146,7 @@ Open **Arena** from the header or Home. Each challenge is a small circuit with a
 comparator, 2-bit adder). Build it on the sheet, name your switches and lamps as the brief says (or keep
 them in that order, top to bottom), and **Check** or **Submit** it.
 
-The checker (`js/checker.js`) runs the build on its own, apart from the sheet:
+The checker (`src/engine/checker.js`) runs the build on its own, apart from the sheet:
 
 1. **Rules** — gates and electronic parts only, or chips too (minus the ones that would just be the
    answer). No clocks, memory, capacitors or inductors, no feedback loops, no spare switches (they'd be a
@@ -142,63 +169,86 @@ no longer passes is dropped. Entries are also re-checked each time a board is dr
 ## Project layout
 
 ```
-index.html            page markup
-css/
-  fonts.css           IBM Plex, served locally
-  base.css            colours, header, sheet, home page, dialogs — shared
-  desktop.css         rail on the left
-  tablet.css          console along the bottom, touch sizes
-js/
-  layout.js           picks the layout (runs first, in <head>)
-  auth.js             accounts (server or browser-only), per-account storage, syncing builds up
-  core.js             constants, the part catalogue, state, colours, geometry, new ids
-  collab.js           shared projects: keeping one sheet in step between people, their pointers
-  shapes.js           drawing gates, switches, buttons and lamps
-  symbols.js          drawing components, chips and displays
-  sim.js              signal drive, every part's logic, clock edges, selection
-  render.js           painting the sheet, hit tests
-  edit.js             adding, wiring, deleting, undo, copy & paste
-  cleaner.js          the Cleaner layout passes
-  input.js            pointer, touch, zoom, keyboard
-  rail.js             the parts rail / console
-  builds.js           saving, the dialog, the toolbar, the examples
-  timing.js           clocks, capacitors and inductors over time
-  api.js              window.bench console API
-  home.js             home page, backup and restore, shared project cards, the top-bar crew strip
-  login.js            the login screen, the header account chip, sign out
-  checker.js          the Arena checker: rules, every input pattern, size, speed, wiring
-  arena.js            challenges, reference builds, standings, import/export, the Arena screens
-  fullscreen.js       full screen + landscape lock
-  main.js             boot
-  offline.js          registers the service worker
-sw.js                 offline cache
-assets/               icon and fonts
+index.html            the Vite entry page
+vite.config.mjs       the build: React, the engine module, the /api routes in dev, the service worker,
+                      and the one-file build
+src/
+  main.jsx            mounts React, loads the styles, registers the service worker
+  App.jsx             the page, and starts the engine once it is on screen
+  store.js            what the engine tells React: the build's kind, the quantum outcomes, the question
+  components/
+    Bench.jsx         the bar, the sheet and the parts console
+    KindChooser.jsx   "classical or quantum?" — asked for every new build
+    QuantumPanel.jsx  what the meters on a quantum sheet read
+    Home.jsx  Arena.jsx  Login.jsx  Dialog.jsx
+  layout-boot.js      picks the layout (put in <head>, runs before the first paint)
+  sw.template.js      the offline cache; the build fills in the file list
+  styles/
+    fonts.css         IBM Plex, served locally
+    base.css          colours, header, sheet, home page, dialogs — shared
+    desktop.css       laptop sizes
+    tablet.css        touch sizes
+    quantum.css       the kind badge, the question, the outcomes panel
+  engine/             the circuit engine: draws the sheet on the canvas and works the page
+    auth.js           accounts (server or browser-only), per-account storage, syncing builds up
+    core.js           constants, the part catalogue, the build's kind, state, colours, geometry, new ids
+    collab.js         shared projects: keeping one sheet in step between people, their pointers
+    shapes.js         drawing gates, switches, buttons and lamps
+    symbols.js        drawing components, chips and displays
+    sim.js            signal drive, every part's logic, clock edges, selection
+    quantum.js        the quantum parts, the state-vector simulator, their drawing, the Bell pair
+    render.js         painting the sheet, hit tests
+    edit.js           adding, wiring, deleting, undo, copy & paste
+    cleaner.js        the Cleaner layout passes
+    input.js          pointer, touch, zoom, keyboard — and the port-to-port wire rule
+    rail.js           the parts console
+    builds.js         saving, the dialog, the toolbar, the examples
+    timing.js         clocks, capacitors and inductors over time
+    api.js            window.bench console API
+    home.js           home page, backup and restore, shared project cards, the top-bar crew strip
+    login.js          the login screen, the header account chip, sign out
+    checker.js        the Arena checker: rules, every input pattern, size, speed, wiring
+    arena.js          challenges, reference builds, standings, import/export, the Arena screens
+    fullscreen.js     full screen + landscape lock
+    main.js           boot
+  assets/fonts/       IBM Plex
+public/               icon and web manifest, served as they are
 api/                  Vercel Functions: auth/{register,login,logout,me}, state (an account's builds),
                       projects (every shared-project call, by action)
   _lib/               accounts, projects, cookies and request helpers; kv.js (Redis, with the two
                       scripts), store.js (Redis, Blob, or local .data/ files)
-tools/bundle.mjs      packs everything into one offline HTML file
-tools/dev-server.mjs  serves the site and the api/ routes together, for local use
+tools/dev-server.mjs  serves the built site (dist/) and the api/ routes together, without Vite
+tools/test-cleaner.mjs  headless checks for the Cleaner and saved chips
+tools/test-quantum.mjs  headless checks for the quantum simulator and the wire rules
 ```
 
-The scripts are plain classic scripts that share one scope, loaded in order — no build step.
+React owns the page: the components render it, and the kind badge, the classical-or-quantum question
+and the outcomes panel are React state. The engine files share one scope and run in the order listed
+in `vite.config.mjs`, which joins them into one module (`virtual:engine`); `startEngine(HOST)` runs
+them after the first render, and `HOST` (`src/store.js`) is how the engine talks back to React.
+To add a part: TYPES and CATS in `core.js` (or `quantum.js`), its logic in `sim.js` (RULE/EDGE) or
+`quantum.js` (QOPS), its drawing in `symbols.js` or `quantum.js` (DRAW).
 
 ## Run it
 
 ```sh
 npm install
-npm run dev           # http://localhost:3000, with the /api routes
+npm run dev           # http://127.0.0.1:3000, hot reload, with the /api routes
+npm run build         # the website, into dist/
+npm run preview       # serves dist/ with the /api routes
+npm test              # the Cleaner and quantum checks
 ```
 
 Locally, with no Redis or Blob set, accounts and builds are kept as files in `.data/` (git-ignored)
 and shared projects are kept in memory until the server stops — open two browser profiles (or one
-normal and one private window) to try building together. Opening `index.html` straight from disk works
-too, with browser-only accounts.
+normal and one private window) to try building together. The one-file copy (below) opens straight from
+disk, with browser-only accounts.
 
 ## Deploy (Vercel)
 
-Import this repo in Vercel with the framework preset **Other** and no build command. The pages
-are static; the `api/` folder is deployed as Node functions. Every push to `main` redeploys.
+Import this repo in Vercel. `vercel.json` sets the framework to **Vite**, the build command to
+`npm run build` and the output folder to `dist`, so nothing needs setting by hand; the `api/` folder is
+deployed as Node functions beside it. Every push to `main` redeploys.
 
 It needs storage, once: in the Vercel project open **Storage**, add **Upstash for Redis** from the
 Marketplace (the free plan is enough to start), connect it to the project — this sets `KV_REST_API_URL`
@@ -214,7 +264,7 @@ saying so — nothing is silently lost.
 ## One-file offline copy
 
 ```sh
-npm run bundle        # → dist/logic-bench.html
+npm run bundle        # → dist-single/logic-bench.html
 ```
 
 A single self-contained HTML file (fonts and all) to copy onto a tablet by USB and open with

@@ -21,6 +21,9 @@ function dragSet(p, primary, group){
   return off;
 }
 /* Shift adds to the picked set or drops out of it; a plain click starts afresh. */
+/* A wire runs from a port to a port. Let go of one over bare sheet and there is
+   no wire: nothing is left dangling with an end on nothing. */
+function noWire(){ flash("No wire made — a wire needs a port at both ends"); }
 function pickHit(k, id, e){
   var set = k === "n" ? pickN : pickW;
   if (e.shiftKey){
@@ -144,7 +147,7 @@ cv.addEventListener("pointerdown", function(e){
       else { var ok = connect(pend, ph); pend = null; if (ok) commit(); else draw(); }
       return;
     }
-    if (pend){ loose(pend, p); pend = null; commit(); return; }
+    if (pend){ pend = null; noWire(); draw(); return; }
     panning = {x:e.clientX, y:e.clientY, px:pan.x, py:pan.y};
     draw(); return;
   }
@@ -153,7 +156,7 @@ cv.addEventListener("pointerdown", function(e){
     ph = portTarget(p, pend.kind === "out" ? "in" : "out");
     if (ph && ph.id === pend.id){ pend = null; draw(); return; }
     if (ph && connect(pend, ph)){ pend = null; commit(); return; }
-    loose(pend, p); pend = null; commit(); return;
+    pend = null; noWire(); draw(); return;
   }
   var we = endAt(p);
   if (we){ wend = we; pickOne("w", we.w.id); pickDel(); evaluate(); draw(); return; }
@@ -239,7 +242,7 @@ window.addEventListener("pointerup", function(e){
     else if (near({x:e.clientX, y:e.clientY}, {x:wiring.sx, y:wiring.sy}, 6)){
       pend = wiring.from; wiring = null; draw();
     }
-    else { loose(wiring.from, p); wiring = null; commit(); }
+    else { wiring = null; noWire(); draw(); }
   }
   if (wend){ dropEnd(wend, toWorld(e)); wend = null; commit(); }
   if (marq){

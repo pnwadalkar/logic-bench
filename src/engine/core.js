@@ -130,12 +130,33 @@ var TYPES = {
    fixed parts: u marks it as the shelf of areas you name and save yourself
    (see saveArea in edit.js). The other part types are still known to the
    bench, so a build that already uses one loads as it always did. */
-var CATS = [
+var CATS_C = [
   {n:"Signals",     t:["SWITCH","BUTTON","CLOCK","HEXIN","LAMP","HEXD","SEG7"]},
   {n:"Gates",       t:["AND","OR","NOT","NAND","NOR","XOR","XNOR","BUF","TRI"]},
   {n:"Arithmetic",  t:["HADD","FADD","ADD4","CMP4","ALU"]},
   {n:"Electronics", t:[], u:1}
 ];
+/* A build is classical or quantum, picked when it is started, and the console
+   offers the parts of that kind only (the quantum ones are in quantum.js). */
+var CATS = CATS_C, docKind = "classical", kindSet = false, railCat = 0;
+var TIP_C = "Drag the bare sheet to move it — a circuit can run far past the window · click a port, then click another port to join them with a wire · Region (R) or Shift-drag boxes in an area to copy, Paste (P) drops it where you click · Cleaner (C) squares it all up";
+var TIP_Q = "Quantum build · every wire carries one qubit from a port to a port, and an output feeds one input only (a qubit cannot be copied) · click a qubit to start it as |0⟩ or |1⟩ · end a line on a Meter to read it out";
+function catKey(){ return "logicbench.cat" + (docKind === "quantum" ? ".q" : ""); }
+function tipShow(){ $("#tip").textContent = $("#tip").title = testMode ? TIP_TEST : TIP_EDIT; }
+function setKind(k){
+  k = k === "quantum" ? "quantum" : "classical";
+  if (kindSet && k === docKind) return;
+  kindSet = true; docKind = k;
+  CATS = k === "quantum" ? CATS_Q : CATS_C;
+  TIP_EDIT = k === "quantum" ? TIP_Q : TIP_C;
+  document.documentElement.setAttribute("data-kind", k);
+  railCat = 0;
+  try { railCat = parseInt(localStorage.getItem(catKey()) || "0", 10) || 0; } catch (err) {}
+  clip = null; lastPaste = null;
+  tipShow();
+  buildRail();
+  HOST.kind(k);
+}
 /* A chip is a box of named pins, PITCH apart, under a title row. Its size, and
    which inputs may be left open — a name ending "=0" or "=1" says what an open
    pin reads as — are worked out once, from the pin names. */
@@ -230,7 +251,7 @@ var wireMode = false, pend = null, cursor = {x:0,y:0}, wend = null;
    piece. marq is the rubber band while it is being drawn. */
 var pickN = new Set(), pickW = new Set(), marq = null, regionMode = false, hover = null;
 var clip = null, lastPaste = null, undoStack = [], space = false, pasteMode = false;
-var testMode = false, TIP_EDIT = $("#tip").textContent;
+var testMode = false, TIP_EDIT = TIP_C;
 var TIP_TEST = "Test mode — click the switches and buttons to drive the circuit · the sheet is locked · T or the Test button to edit again";
 var docName = "", docDirty = false;
 var dpr = 1, queued = false, dotPat = null, C = {};

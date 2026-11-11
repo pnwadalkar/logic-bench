@@ -2,13 +2,24 @@
   "name": "logic-bench",
   "version": "1.0.0",
   "private": true,
-  "description": "Build and test logic circuits from switches, gates and lamps, in the browser.",
+  "description": "Build and test classical logic circuits and quantum circuits, in the browser.",
   "scripts": {
-    "dev": "node tools/dev-server.mjs 3000",
-    "bundle": "node tools/bundle.mjs"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bundle": "vite build --mode single",
+    "serve": "node tools/dev-server.mjs 3000",
+    "test": "node tools/test-cleaner.mjs && node tools/test-quantum.mjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.40.0",
-    "@vercel/blob": "^2.8.2"
+    "@vercel/blob": "^2.8.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
+    "vite": "^6.4.6",
+    "vite-plugin-singlefile": "^2.3.4"
   }
 }

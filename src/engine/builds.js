@@ -53,6 +53,7 @@ function snapshot(){
     }),
     seq:seq, pan:{x:pan.x, y:pan.y}, zoom:zoom
   };
+  if (docKind === "quantum") o.kind = "quantum";
   if (Object.keys(chips).length) o.chips = chips;
   return o;
 }
@@ -82,6 +83,7 @@ function graphOf(d){
 function load(d){
   if (!d || !d.nodes || !d.nodes.length) return false;
   var g = graphOf(d);
+  setKind(d.kind);
   nodes = g.nodes; wires = g.wires;
   seq = d.seq || nodes.length + wires.length + 2;
   pan = d.pan && typeof d.pan.x === "number" ? {x:d.pan.x, y:d.pan.y} : {x:0, y:0};
@@ -288,7 +290,7 @@ $("#btnSave").addEventListener("click", saveBuild);
 $("#btnDel").addEventListener("click", removeSel);
 $("#btnClean").addEventListener("click", function(){ cleanUp(); });
 $("#btnTest").addEventListener("click", function(){ setTest(!testMode); });
-$("#btnEg").addEventListener("click", function(){ example(); });
+$("#btnEg").addEventListener("click", function(){ if (docKind === "quantum") exampleQ(); else example(); });
 /* The name in the bar is the build's name: type over it to rename the build. */
 $("#docname").addEventListener("keydown", function(e){
   if (e.key === "Enter"){ this.blur(); return; }
@@ -298,8 +300,10 @@ $("#docname").addEventListener("change", function(){ renameBuild(this.value); })
 
 /* No are-you-sure: the sheet being left is kept under its own name first. */
 $("#btnNew").addEventListener("click", function(){
-  newSheet();
-  flash("New sheet — “" + docName + "”");
+  HOST.chooseKind(function(kind){
+    newSheet(kind);
+    flash("New " + kind + " sheet — “" + docName + "”");
+  });
 });
 
 
@@ -314,7 +318,7 @@ function leaveShared(){
   return true;
 }
 function example(){
-  leaveShared();
+  leaveShared(); setKind("classical");
   nodes = []; wires = []; seq = 1; pan = {x:0, y:0}; zoom = ZDEF; zoomShow(); clearPick(); pend = null; cascade = 0;
   var a = addNode("SWITCH", 72, 96), b = addNode("SWITCH", 72, 204);
   var x = addNode("XOR", 228, 96), n = addNode("AND", 228, 204);
@@ -332,7 +336,7 @@ function example(){
 /* Counter: a clock stepping a 4-bit counter, read out on a hex display, with the
    carry lit at F — the program counter of a CPU, ticking. */
 function example2(){
-  leaveShared();
+  leaveShared(); setKind("classical");
   nodes = []; wires = []; seq = 1; pan = {x:0, y:0}; zoom = ZDEF; zoomShow(); clearPick(); pend = null; cascade = 0;
   var k = addNode("CLOCK", 60, 168), c = addNode("CNT4", 168, 84);
   var d = addNode("HEXD", 324, 120), co = addNode("LAMP", 336, 228), i;

@@ -2,7 +2,7 @@
 
 /* One function for every shared-project call, picked by `action`:
    GET  → the projects you are in
-   POST {action:"create", name, start} · {action:"join", code} · {action:"open", id}
+   POST {action:"create", name, start, kind} · {action:"join", code} · {action:"open", id}
         {action:"sync", id, since, client, patch, here} · {action:"rename", id, name}
         {action:"leave", id} · {action:"delete", id} */
 const accounts = require("./_lib/accounts");
@@ -18,7 +18,7 @@ module.exports = handle(async function (req) {
   sameOrigin(req);
   const b = await readJson(req);
   switch (b.action) {
-    case "create": return { body: { project: await projects.create(user, b.name, b.start) } };
+    case "create": return { body: { project: await projects.create(user, b.name, b.start, b.kind) } };
     case "join": return { body: { project: await projects.join(user, b.code) } };
     case "open": return { body: await projects.open(user, b.id) };
     case "sync": return { body: await projects.sync(user, b.id, b) };

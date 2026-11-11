@@ -30,6 +30,7 @@ function render(){
       ctx.strokeStyle = C.sel; ctx.lineWidth = 4; ctx.globalAlpha = 0.35;
       wirePath(ctx, bx, pt); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 2;
     }
+    if (docKind === "quantum" && w.a && w.b){ qWire(ctx, a, w, bx, pt); continue; }
     on = a ? lvl(a, w.q) : 0;
     ctx.strokeStyle = on ? C.hot : C.wire;
     /* a wire nothing is driving — an off transistor's, say — is drawn broken */

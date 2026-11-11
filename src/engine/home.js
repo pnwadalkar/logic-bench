@@ -56,6 +56,7 @@ function card(name, d, live){
   nm.textContent = name;
   mt.textContent = (d.nodes ? d.nodes.length : 0) + " parts · " +
     (d.wires ? d.wires.length : 0) + " wires" + (!live && d.at ? " · " + when(d.at) : "");
+  if (d.kind === "quantum"){ el.className += " quantum"; nm.appendChild(kindTag()); }
   if (live){
     tag = document.createElement("i");
     tag.textContent = " · " + (docDirty ? "unsaved" : "open");
@@ -127,9 +128,10 @@ function openBuild(name){
 }
 /* A bare sheet under a fresh name. The sheet being left is kept first, so New
    never costs anything. */
-function newSheet(){
+function newSheet(kind){
   if (testMode) setTest(false);
   if (!leaveShared()) pushUndo();
+  setKind(kind);
   nodes = []; wires = []; clearPick(); pend = null; wiring = null; marq = null;
   cascade = 0; pan = {x:0, y:0}; zoom = ZDEF; zoomShow();
   docName = suggestName(); docDirty = false;
@@ -138,9 +140,13 @@ function newSheet(){
 $("#btnHome").addEventListener("click", homeShow);
 $("#hBack").addEventListener("click", enterBench);
 $("#hNew").addEventListener("click", function(){
-  newSheet(); enterBench();
-  flash("New sheet · drag a part in from the console below");
+  HOST.chooseKind(function(kind){
+    newSheet(kind); enterBench();
+    flash("New " + kind + " sheet · drag a part in from the console below");
+  });
 });
+$("#hEgQ").addEventListener("click", function(){ exampleQ(); enterBench(); });
+function kindTag(){ var s = document.createElement("span"); s.className = "kindTag"; s.textContent = "Quantum"; return s; }
 $("#hEg").addEventListener("click", function(){ example(); enterBench(); });
 $("#hEg2").addEventListener("click", function(){ example2(); enterBench(); });
 /* Back up: every build in one file, for safe keeping or another device. */
@@ -210,6 +216,7 @@ function backToMine(){
   try { cur = JSON.parse(localStorage.getItem(CURKEY()) || "null"); } catch (err) {}
   if (cur && cur.doc && load(cur.doc)){ docName = cur.doc.name || suggestName(); docDirty = !!cur.dirty; }
   else {
+    setKind("classical");
     nodes = []; wires = []; clearPick(); pend = null; wiring = null; marq = null;
     pan = {x:0, y:0}; zoom = ZDEF; zoomShow(); reindex();
     docName = suggestName(); docDirty = false;
@@ -245,6 +252,7 @@ function sharedCard(p){
   nm.textContent = p.name;
   mt.textContent = p.parts + " part" + (p.parts === 1 ? "" : "s") + " · " + p.members.length + " " +
     (p.members.length === 1 ? "person" : "people") + " · code " + p.code;
+  if (p.kind === "quantum"){ el.className += " quantum"; nm.appendChild(kindTag()); }
   if (live){ tag = document.createElement("i"); tag.textContent = " · open"; mt.appendChild(tag); }
   go.appendChild(avatars(p.members.map(function(m){ return {name:m.name, color:m.color, note:m.id === p.owner ? " · owner" : ""}; }), 8));
   go.appendChild(nm); go.appendChild(mt);
@@ -299,15 +307,17 @@ function loadShared(){
     function(e){ shLoaded = true; if (!$("#home").hidden){ renderShared(); $("#shNote").textContent = e.message; } });
 }
 $("#shNew").addEventListener("click", function(){
-  ask({title:"New shared project", ok:"Create", value:"Shared CPU",
+  HOST.chooseKind(function(kind){
+  ask({title:"New shared " + kind + " project", ok:"Create", value:kind === "quantum" ? "Shared qubits" : "Shared CPU",
     msg:"An empty sheet that you and the people you invite all build on at once — one of you on the adder, another on the subtractor.",
     check:function(v){ return v ? "" : "Give it a name."; },
     done:function(v){
       if (testMode) setTest(false);
       keepBuild();
-      Collab.create(v, false).then(function(){ enterBench(); loadShared(); flash("“" + v + "” is ready · press Invite at the top to bring people in"); },
+      Collab.create(v, false, kind).then(function(){ enterBench(); loadShared(); flash("“" + v + "” is ready · press Invite at the top to bring people in"); },
         function(e){ flash(e.message); });
     }});
+  });
 });
 $("#shFrom").addEventListener("click", function(){
   if (!nodes.length || Collab.active()) return;

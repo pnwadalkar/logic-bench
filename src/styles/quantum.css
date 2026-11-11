@@ -1,0 +1,62 @@
+/* Classical or quantum: the badge beside the build's name, the question a new
+   build starts with, the outcomes panel on a quantum sheet, and what a quantum
+   build hides (the classical-only tools). */
+#root{display:contents}
+
+#kind{flex:none;font:600 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+  padding:4px 6px;border-radius:3px;border:1px solid var(--grid);color:var(--muted)}
+#kind.quantum{border-color:var(--accent);color:var(--accent)}
+.kindTag{display:inline-block;margin-left:7px;vertical-align:1px;font:600 8px/1 var(--mono);letter-spacing:.1em;
+  text-transform:uppercase;padding:3px 5px;border-radius:3px;border:1px solid var(--accent);color:var(--accent)}
+
+/* a quantum build has no Cleaner and makes no chips */
+[data-kind="quantum"] #btnClean,
+[data-kind="quantum"] #pick [data-a="save"]{display:none}
+
+/* ---------- the question ---------- */
+#kindDlg{position:fixed;inset:0;z-index:55;background:var(--shade);display:flex;align-items:center;justify-content:center;
+  padding:16px;overflow-y:auto}
+.kindBox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 20px 16px;
+  width:min(620px,100%);box-sizing:border-box;box-shadow:0 12px 40px var(--shade);margin:auto}
+#kindT{margin:0 0 6px;font:600 13px/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.kindM{margin:0 0 14px;font:400 13px/1.5 var(--sans);color:var(--muted)}
+.kinds{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.kinds{grid-template-columns:1fr}}
+.kindCard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;text-transform:none;letter-spacing:0;
+  padding:14px;border-radius:8px;border-color:var(--grid);background:var(--canvas);color:var(--fg)}
+:where([data-layout]) .kindBox .kindCard{padding:14px}
+.kindCard:hover,.kindCard:focus-visible{border-color:var(--accent);color:var(--fg)}
+.kindCard svg{width:100%;height:64px;margin-bottom:4px}
+.kindCard svg .w{fill:none;stroke:var(--wire);stroke-width:2;stroke-linecap:round}
+.kindCard svg .l{fill:none;stroke:var(--line);stroke-width:2;stroke-linecap:round}
+.kindCard svg .b{fill:var(--body);stroke:var(--line);stroke-width:2;stroke-linejoin:round}
+.kindCard.quantum svg rect.b{stroke:var(--accent)}
+.kindCard svg .hot{fill:var(--hot)}
+.kindCard svg .dot{fill:var(--line)}
+.kindCard svg text{font:600 14px var(--mono);fill:var(--fg)}
+.kindCard b{font:600 13px/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase}
+.kindCard:hover b,.kindCard:focus-visible b{color:var(--accent)}
+.kindLine{font:500 13px/1.4 var(--sans)}
+.kindParts{font:400 12px/1.5 var(--sans);color:var(--muted)}
+
+/* ---------- outcomes, docked in the sheet's top-right corner ---------- */
+#qpanel{position:absolute;z-index:5;top:12px;right:max(14px,env(safe-area-inset-right,0px));width:min(250px,calc(100% - 28px));
+  max-height:calc(100% - 84px);display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 2px 10px var(--shade);overflow:hidden}
+#qpanel .qhead{display:flex;align-items:baseline;gap:8px;width:100%;border:0;border-radius:0;padding:10px 12px;text-align:left}
+:where([data-layout]) #qpanel .qhead{padding:10px 12px}
+#qpanel .qhead b{font:600 11px/1 var(--mono);letter-spacing:.08em;color:var(--accent)}
+#qpanel .qhead span{flex:1 1 auto;font:400 10px/1 var(--mono);letter-spacing:0;text-transform:none;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#qpanel .qhead i{font-style:normal;color:var(--muted)}
+#qpanel .qbody{border-top:1px solid var(--grid);padding:10px 12px 12px;overflow-y:auto}
+#qpanel .qnote{margin:0;font:400 12px/1.5 var(--sans);color:var(--muted)}
+#qpanel ul+.qnote{margin-top:8px}
+#qpanel .qorder{margin:0 0 8px;font:500 10px/1.3 var(--mono);color:var(--muted);overflow-wrap:anywhere}
+#qpanel ul{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+#qpanel li{display:grid;grid-template-columns:auto 1fr 46px;align-items:center;gap:8px}
+#qpanel code{font:500 12px/1 var(--mono);color:var(--fg)}
+#qpanel .qbar{height:8px;border-radius:4px;background:var(--grid);overflow:hidden}
+#qpanel .qbar span{display:block;height:100%;border-radius:4px;background:var(--hot);transition:width .16s}
+#qpanel em{font:500 11px/1 var(--mono);font-style:normal;text-align:right;font-variant-numeric:tabular-nums;color:var(--fg)}
+@media (prefers-reduced-motion:reduce){#qpanel .qbar span{transition:none}}
