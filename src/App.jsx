@@ -18,6 +18,21 @@ export default function App() {
   useViewportHeight();
   /* the sheet's canvas is on the page by now (Stage mounts first): sign in and open the last sheet */
   useEffect(() => { start(); }, []);
+  /* A mouse wheel only turns up and down: over the header or the parts console, which
+     slide sideways when the window is narrower than they are, it slides them instead. */
+  useEffect(() => {
+    const wheel = (e) => {
+      if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const el = e.target.closest && e.target.closest("#rail, .bar");
+      if (!el || el.scrollWidth <= el.clientWidth + 1) return;
+      const left = el.scrollLeft, max = el.scrollWidth - el.clientWidth;
+      if ((e.deltaY < 0 && left <= 0) || (e.deltaY > 0 && left >= max)) return;
+      el.scrollLeft = left + e.deltaY;
+      e.preventDefault();
+    };
+    document.addEventListener("wheel", wheel, { passive: false });
+    return () => document.removeEventListener("wheel", wheel);
+  }, []);
   /* the stylesheet hides what a quantum build has no use for */
   const kind = S.docKind;
   useEffect(() => { document.documentElement.setAttribute("data-kind", kind); }, [kind]);
