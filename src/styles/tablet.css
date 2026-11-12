@@ -10,14 +10,19 @@
 
 [data-layout="tablet"] #main{flex-direction:column}
 [data-layout="tablet"] #rail{order:2;border-top:1px solid var(--grid);
-  display:flex;flex-direction:column;flex-wrap:nowrap;align-items:flex-start;row-gap:8px;
-  overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;
+  display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;row-gap:8px;
+  overflow:hidden;
   max-height:38vh;max-height:38dvh;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   padding-top:9px;padding-bottom:max(9px,env(safe-area-inset-bottom,0px))}
 [data-layout="tablet"] .grp{margin:0 0 6px 4px}
-[data-layout="tablet"] #rail .gp{flex:none}
-[data-layout="tablet"] #rail .set{flex-direction:row;gap:2px}
+[data-layout="tablet"] #rail .gp{flex:none;min-width:0}
+[data-layout="tablet"] #rail #gpParts{flex:0 1 auto;min-height:0;display:flex;flex-direction:column}
+/* only the rows of parts slide sideways: the names (Tools, Parts) and the tabs
+   (Signals, Gates, Electronics...) stay put */
+[data-layout="tablet"] #rail .set{flex-direction:row;flex-wrap:nowrap;gap:2px;min-width:0;
+  overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;scrollbar-width:thin}
+[data-layout="tablet"] #rail .set .part{flex:none}
 [data-layout="tablet"] .part{flex-direction:column;gap:3px;padding:4px 4px 5px;border-radius:6px}
 [data-layout="tablet"] .part span{font-size:10px}
 [data-layout="tablet"] .cats{gap:4px;margin-bottom:6px}
@@ -30,4 +35,12 @@
   [data-layout="tablet"] .part span{display:none}
   [data-layout="tablet"] .part{padding:5px;min-width:0}
   :where([data-layout="tablet"]) button{padding:8px 7px}
+}
+
+/* a phone turned sideways has little height: the tiles go to bare icons so all three rows fit */
+@media (max-height:520px){
+  [data-layout="tablet"] .grp{display:none}
+  [data-layout="tablet"] .part span{display:none}
+  [data-layout="tablet"] .part{padding:5px}
+  [data-layout="tablet"] #rail{max-height:46vh;max-height:46dvh;row-gap:4px;padding-top:6px}
 }
