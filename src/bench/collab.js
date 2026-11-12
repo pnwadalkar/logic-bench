@@ -207,6 +207,7 @@ export var Collab = (function(){
       });
     }
     me.rev = res.rev;
+    refreshMeta(me);
     me.peers = (res.here || []).filter(function(h){ return h.k !== CLIENT && res.now - h.t < 15000; });
     me.peers.forEach(function(h){
       var was = me.seen[h.k];
@@ -220,6 +221,23 @@ export var Collab = (function(){
     }
     S.docDirty = diff(here(), 1).count > 0; notify();
     draw();
+  }
+
+  /* The project's name and members can change under you (someone renames it, or
+     joins). Every 15 s or so the list is asked for, and the open project's card
+     is taken from it. */
+  function refreshMeta(me){
+    var now = Date.now();
+    if (me.metaBusy || now - (me.metaAt || 0) < 15000) return;
+    me.metaBusy = true; me.metaAt = now;
+    api(null).then(function(d){
+      var p = (d.projects || []).filter(function(x){ return x.id === me.id; })[0];
+      me.metaBusy = false;
+      if (!p || P !== me) return;
+      if (p.name !== me.project.name) S.docName = p.name;
+      me.project = p;
+      notify(); tell();
+    }, function(){ me.metaBusy = false; });
   }
 
   /* ---------- opening and leaving ---------- */

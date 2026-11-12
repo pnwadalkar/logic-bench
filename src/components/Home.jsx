@@ -6,7 +6,7 @@ import { askDelete, askNew, askRename, copyBuild, example, example2, libRead, sn
 import { exampleQ } from "../bench/quantum.js";
 import { arenaShow } from "../bench/arena.js";
 import {
-  askDeleteShared, askQuitShared, backupAll, enterBench, inviteAsk, joinShared, newShared, openBuild, openShared,
+  askDeleteShared, askQuitShared, backupAll, enterBench, inviteAsk, joinShared, loadShared, newShared, openBuild, openShared,
   readFile, restoreText, shareSheet, thumb
 } from "../bench/home.js";
 import { useBench } from "../hooks.js";
@@ -110,6 +110,20 @@ function Shared() {
 export default function Home() {
   useBench();
   const file = useRef(null);
+  /* While the home page is up, other people's changes arrive on it: new members,
+     new projects you were invited to, builds saved on your other devices. */
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      loadShared();
+      Auth.refresh();
+    };
+    const id = setInterval(tick, 6000);
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
+    tick();
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", tick); window.removeEventListener("focus", tick); };
+  }, []);
   const me = Auth.current(), lib = libRead();
   const onSheet = S.nodes.length > 0 && !Collab.active();
   /* the open sheet is the first card — it is not listed twice */

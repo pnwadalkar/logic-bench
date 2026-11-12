@@ -113,16 +113,36 @@ export var Auth = (function(){
   /* Two copies of a build library made one: every name from both, and where both
      have a name, the one saved last. Nothing is lost, though a build deleted on
      one device while another was offline can come back. */
-  function mergeLib(a, b){
+  function mergeLib(a, b, gone){
     var out = {}, k;
     for (k in b) out[k] = b[k];
     for (k in a) if (!out[k] || ((a[k] && a[k].at) || 0) >= ((out[k] && out[k].at) || 0)) out[k] = a[k];
+    /* a build deleted (or renamed away) after it was last saved stays gone */
+    if (gone) for (k in out) if (gone[k] && gone[k] >= ((out[k] && out[k].at) || 0)) delete out[k];
     return out;
+  }
+  /* the deletion records of two copies, the later time for each name */
+  function mergeGone(a, b){
+    var out = {}, k, horizon = Date.now() - 60 * 24 * 60 * 60 * 1000;
+    [b || {}, a || {}].forEach(function(m){
+      for (k in m) if (m[k] > horizon && !(out[k] >= m[k])) out[k] = m[k];
+    });
+    return out;
+  }
+  /* what another device sent: its builds merged into this browser's, deletions included */
+  function takeIn(id, data){
+    var gone = mergeGone(readKey(ckey(id, "gone"), {}), data.gone);
+    rawSet(ckey(id, "gone"), gone);
+    rawSet(ckey(id, "lib"), mergeLib(readKey(ckey(id, "lib"), {}), data.lib || {}, gone));
+    rawSet(ckey(id, "areas"), mergeLib(readKey(ckey(id, "areas"), {}), data.areas || {}));
+    if (!readKey(ckey(id, "cur"), null) && data.cur) rawSet(ckey(id, "cur"), data.cur);
+    sync.rev = data.rev || 0; rawSet(ckey(id, "rev"), sync.rev);
   }
   function adopt(id, data){
     rawSet(ckey(id, "lib"), data.lib || {});
     if (data.cur) rawSet(ckey(id, "cur"), data.cur); else rawDel(ckey(id, "cur"));
     rawSet(ckey(id, "areas"), data.areas || {});   /* the account's chip shelf, see edit.js */
+    rawSet(ckey(id, "gone"), data.gone || {});
     sync.rev = data.rev || 0;
     rawSet(ckey(id, "rev"), sync.rev);
   }
@@ -147,13 +167,9 @@ export var Auth = (function(){
   function pull(){
     var id = cloudUser.id;
     return api("/api/state").then(function(data){
-      var dirty = rawGet(ckey(id, "dirty"), false), claimed = claimLocal(id), mine;
+      var dirty = rawGet(ckey(id, "dirty"), false), claimed = claimLocal(id);
       if (dirty || claimed){
-        mine = readKey(ckey(id, "lib"), {});
-        rawSet(ckey(id, "lib"), mergeLib(mine, data.lib || {}));
-        rawSet(ckey(id, "areas"), mergeLib(readKey(ckey(id, "areas"), {}), data.areas || {}));
-        if (!readKey(ckey(id, "cur"), null) && data.cur) rawSet(ckey(id, "cur"), data.cur);
-        sync.rev = data.rev || 0; rawSet(ckey(id, "rev"), sync.rev);
+        takeIn(id, data);
         me.changed();
       } else {
         adopt(id, data);
@@ -172,7 +188,7 @@ export var Auth = (function(){
     if (!id || sync.busy) return Promise.resolve();
     if (!rawGet(ckey(id, "dirty"), false)) return Promise.resolve();
     body = {lib:readKey(ckey(id, "lib"), {}), cur:readKey(ckey(id, "cur"), null),
-      areas:readKey(ckey(id, "areas"), {}), base:sync.rev};
+      areas:readKey(ckey(id, "areas"), {}), gone:readKey(ckey(id, "gone"), {}), base:sync.rev};
     sync.busy = true; setState("saving");
     return api("/api/state", "POST", body, keepalive && JSON.stringify(body).length < 60000).then(function(out){
       sync.busy = false; sync.retry = 0;
@@ -183,10 +199,7 @@ export var Auth = (function(){
       sync.busy = false;
       if (e.status === 409 && e.data){
         /* another device saved first: take in its builds and send the two together */
-        rawSet(ckey(id, "lib"), mergeLib(readKey(ckey(id, "lib"), {}), e.data.lib || {}));
-        rawSet(ckey(id, "areas"), mergeLib(readKey(ckey(id, "areas"), {}), e.data.areas || {}));
-        if (!readKey(ckey(id, "cur"), null) && e.data.cur) rawSet(ckey(id, "cur"), e.data.cur);
-        sync.rev = e.data.rev || 0; rawSet(ckey(id, "rev"), sync.rev);
+        takeIn(id, e.data);
         if (typeof onMerged === "function") onMerged();
         return push();
       }
@@ -198,6 +211,36 @@ export var Auth = (function(){
     });
   }
   var onMerged = null;
+
+  /* Ask the server whether another device has saved since, and if so take its
+     builds in. Nothing is asked while this browser has changes of its own still
+     to send: those go up first, and a clash is merged then. The open sheet is
+     never replaced from here - only the library behind the Home page. */
+  function refresh(){
+    var id = cloudUser && cloudUser.id;
+    if (mode !== "cloud" || !id || sync.busy || sync.polling) return Promise.resolve();
+    if (rawGet(ckey(id, "dirty"), false)) return Promise.resolve();
+    sync.polling = true;
+    return api("/api/state?since=" + sync.rev).then(function(data){
+      var before, after;
+      sync.polling = false;
+      if (data.same || data.rev === sync.rev || !cloudUser || cloudUser.id !== id) return;
+      if (rawGet(ckey(id, "dirty"), false) || sync.busy) return;     /* changed here meanwhile: its push will merge */
+      before = localStorage.getItem(ckey(id, "lib")) + localStorage.getItem(ckey(id, "areas"));
+      rawSet(ckey(id, "lib"), data.lib || {});
+      rawSet(ckey(id, "areas"), data.areas || {});
+      rawSet(ckey(id, "gone"), data.gone || {});
+      sync.rev = data.rev || 0; rawSet(ckey(id, "rev"), sync.rev);
+      after = localStorage.getItem(ckey(id, "lib")) + localStorage.getItem(ckey(id, "areas"));
+      if (before !== after && typeof onMerged === "function") onMerged();
+      if (sync.state !== "saved") setState("saved");
+    }, function(e){
+      sync.polling = false;
+      if (e.status === 401) setState("signedout");
+    });
+  }
+  var POLL_MS = 8000;
+  setInterval(function(){ if (document.visibilityState === "visible") refresh(); }, POLL_MS);
 
   function signedIn(user){
     cloudUser = user;
@@ -257,7 +300,7 @@ export var Auth = (function(){
         return api("/api/auth/logout", "POST", {}).catch(function(){});
       }).then(function(){
         /* builds that reached the server leave this browser; unsent ones stay until they can go */
-        if (u && !rawGet(ckey(u.id, "dirty"), false)) ["lib", "cur", "rev"].forEach(function(n){ rawDel(ckey(u.id, n)); });
+        if (u && !rawGet(ckey(u.id, "dirty"), false)) ["lib", "cur", "rev", "areas", "gone"].forEach(function(n){ rawDel(ckey(u.id, n)); });
         rawDel(CLOUD); cloudUser = null;
       });
     },
@@ -270,6 +313,17 @@ export var Auth = (function(){
       clearTimeout(pushT);
       pushT = setTimeout(function(){ push(); }, 1200);
     },
+    /* The library was written: names that went missing are recorded as deleted, so
+       no other device brings them back; names that came back are not. */
+    noteLib:function(before, after){
+      var id = cloudUser && cloudUser.id, gone, k, any = false;
+      if (mode !== "cloud" || !id) return;
+      gone = rawGet(ckey(id, "gone"), {});
+      for (k in before) if (!(k in after)){ gone[k] = Date.now(); any = true; }
+      for (k in after) if (!(k in before) && gone[k]){ delete gone[k]; any = true; }
+      if (any) rawSet(ckey(id, "gone"), gone);
+    },
+    refresh:refresh,
     /* "saved" | "pending" | "saving" | "waiting" (no connection) | "signedout" */
     syncState:function(){ return sync.state; },
     onSync:function(fn){ sync.listeners.push(fn); },
@@ -279,10 +333,13 @@ export var Auth = (function(){
   };
   var pushT = 0;
 
-  window.addEventListener("online", function(){ if (mode === "cloud") me.flush(); });
+  window.addEventListener("online", function(){ if (mode === "cloud") me.flush().then(refresh); });
+  window.addEventListener("focus", function(){ if (mode === "cloud") refresh(); });
   /* leaving the page sends anything still waiting */
   document.addEventListener("visibilitychange", function(){
-    if (document.visibilityState === "hidden" && mode === "cloud") me.flush(true);
+    if (mode !== "cloud") return;
+    if (document.visibilityState === "hidden") me.flush(true);
+    else refresh();
   });
   return me;
 })();

@@ -123,7 +123,12 @@ export function libRead(){
   } catch (err) { return {}; }
 }
 export function libWrite(o){
-  try { localStorage.setItem(LIBKEY(), JSON.stringify(o)); Auth.changed(); return true; }
+  try {
+    var before = libRead();
+    localStorage.setItem(LIBKEY(), JSON.stringify(o));
+    Auth.noteLib(before, o);
+    Auth.changed(); return true;
+  }
   catch (err) { return false; }
 }
 

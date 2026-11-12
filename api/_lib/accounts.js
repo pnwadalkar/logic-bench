@@ -150,13 +150,22 @@ function cleanState(body) {
   if (body.cur && typeof body.cur === "object" && body.cur.doc && typeof body.cur.doc === "object") {
     cur = { doc: body.cur.doc, dirty: !!body.cur.dirty };
   }
-  return { lib: lib, cur: cur, areas: areas };
+  /* names of builds deleted or renamed away, with when: so another device that
+     still has one does not bring it back */
+  const gone = {};
+  const goneIn = body.gone && typeof body.gone === "object" && !Array.isArray(body.gone) ? body.gone : {};
+  const horizon = Date.now() - 60 * 24 * 60 * 60 * 1000;
+  Object.keys(goneIn).slice(0, 400).forEach(function (k) {
+    const t = Number(goneIn[k]);
+    if (isFinite(t) && t > horizon) gone[k] = t;
+  });
+  return { lib: lib, cur: cur, areas: areas, gone: gone };
 }
 
 async function readState(user) {
   const row = await guard(function () { return store.readJson(stateKey(user.id)); });
-  if (!row) return { lib: {}, cur: null, areas: {}, rev: 0 };
-  return { lib: row.lib || {}, cur: row.cur || null, areas: row.areas || {}, rev: row.rev || 0 };
+  if (!row) return { lib: {}, cur: null, areas: {}, gone: {}, rev: 0 };
+  return { lib: row.lib || {}, cur: row.cur || null, areas: row.areas || {}, gone: row.gone || {}, rev: row.rev || 0 };
 }
 
 /* body.base is the rev the device last saw. If another device has saved since,
@@ -167,13 +176,14 @@ async function writeState(user, body) {
   const have = prev && prev.rev || 0;
   if (typeof body.base === "number" && body.base !== have) {
     const err = new HttpError(409, "Saved from another device since.");
-    err.body = { error: err.message, lib: prev.lib || {}, cur: prev.cur || null, areas: prev.areas || {}, rev: have };
+    err.body = { error: err.message, lib: prev.lib || {}, cur: prev.cur || null, areas: prev.areas || {}, gone: prev.gone || {}, rev: have };
     throw err;
   }
   const next = {
     lib: clean.lib,
     cur: clean.cur,
     areas: clean.areas,
+    gone: clean.gone,
     rev: (prev && prev.rev || 0) + 1,
     updated: Date.now()
   };
