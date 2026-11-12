@@ -3,7 +3,7 @@ import { S } from "../bench/state.js";
 import { TYPES } from "../bench/core.js";
 import { cleanIcon, cursorIcon, pasteIcon, pointIcon, railIcon, regionIcon, wireIcon } from "../bench/icons.js";
 import { cleanUp, setRegionMode, setSelectMode, setWireMode } from "../bench/cleaner.js";
-import { areaKey, areaNames, askDeleteArea, setCat, setPasteMode, spawnArea, spawnPart } from "../bench/edit.js";
+import { areaKey, areaNames, areaScope, askDeleteArea, setAreaScope, setCat, setPasteMode, spawnArea, spawnPart } from "../bench/edit.js";
 import { useBench } from "../hooks.js";
 
 /* The picture on a tile: drawn on a canvas by the bench's own part drawings, and
@@ -36,9 +36,19 @@ function Shelf() {
   return names.map((name) => {
     const key = areaKey(name);
     if (!key) return null;
+    const scope = areaScope(name);
+    const scopeTip = scope === "project"
+      ? "Kept with this build only — click to put it on your account's shelf instead, for every project"
+      : "On your account's shelf — every project can use it — click to keep it with this build only";
     return (
       <Tile key={name} t="AREA" label={name} what={key} tip={TYPES[key].tip + " — drag it onto the sheet"}
         draw={(c) => railIcon(c, key)} onDown={(e) => spawnArea(name, e)}>
+        <button type="button" className={"scope" + (scope === "project" ? " on" : "")} title={scopeTip}
+          aria-label={(scope === "project" ? "This build only: " : "Every project: ") + name}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); setAreaScope(name, scope === "project" ? "global" : "project"); }}>
+          {scope === "project" ? "1" : "∀"}
+        </button>
         <button type="button" className="x" title={"Delete “" + name + "”"} aria-label={"Delete the saved chip " + name}
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); askDeleteArea(name); }}>✕</button>

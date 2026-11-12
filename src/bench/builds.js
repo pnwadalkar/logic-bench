@@ -65,6 +65,7 @@ export function snapshot(){
   };
   if (S.docKind === "quantum") o.kind = "quantum";
   if (Object.keys(chips).length) o.chips = chips;
+  if (S.localAreas && Object.keys(S.localAreas).length) o.localAreas = S.localAreas;
   return o;
 }
 /* The parts and wires a build holds, as live objects — anything that does not
@@ -95,6 +96,9 @@ export function load(d){
   var g = graphOf(d);
   setKind(d.kind);
   S.nodes = g.nodes; S.wires = g.wires;
+  /* chips kept with this build only (see setAreaScope in edit.js) — never carried
+     over from whatever build was open before this one loaded */
+  S.localAreas = (d.localAreas && typeof d.localAreas === "object") ? d.localAreas : {};
   S.seq = d.seq || S.nodes.length + S.wires.length + 2;
   S.pan = d.pan && typeof d.pan.x === "number" ? {x:d.pan.x, y:d.pan.y} : {x:0, y:0};
   S.zoom = typeof d.zoom === "number" ? clampZ(d.zoom) : S.ZDEF;
@@ -208,7 +212,7 @@ export function dropBuild(name, live){
   delete lib[name]; libWrite(lib);
   if (live || S.docName === name){
     if (S.testMode) setTest(false);
-    S.nodes = []; S.wires = []; clearPick(); S.pend = null; S.wiring = null; S.marq = null;
+    S.nodes = []; S.wires = []; S.localAreas = {}; clearPick(); S.pend = null; S.wiring = null; S.marq = null;
     S.cascade = 0; S.pan = {x:0, y:0}; S.zoom = S.ZDEF; notify();
     S.docName = suggestName(); S.docDirty = false;
     reindex(); notify(); evaluate(); draw(); saveCur();
@@ -275,7 +279,7 @@ export function leaveShared(){
 }
 export function example(){
   leaveShared(); setKind("classical");
-  S.nodes = []; S.wires = []; S.seq = 1; S.pan = {x:0, y:0}; S.zoom = S.ZDEF; notify(); clearPick(); S.pend = null; S.cascade = 0;
+  S.nodes = []; S.wires = []; S.seq = 1; S.localAreas = {}; S.pan = {x:0, y:0}; S.zoom = S.ZDEF; notify(); clearPick(); S.pend = null; S.cascade = 0;
   var a = addNode("SWITCH", 72, 96), b = addNode("SWITCH", 72, 204);
   var x = addNode("XOR", 228, 96), n = addNode("AND", 228, 204);
   var s = addNode("LAMP", 384, 102), cy = addNode("LAMP", 384, 210);
@@ -293,7 +297,7 @@ export function example(){
    carry lit at F — the program counter of a CPU, ticking. */
 export function example2(){
   leaveShared(); setKind("classical");
-  S.nodes = []; S.wires = []; S.seq = 1; S.pan = {x:0, y:0}; S.zoom = S.ZDEF; notify(); clearPick(); S.pend = null; S.cascade = 0;
+  S.nodes = []; S.wires = []; S.seq = 1; S.localAreas = {}; S.pan = {x:0, y:0}; S.zoom = S.ZDEF; notify(); clearPick(); S.pend = null; S.cascade = 0;
   var k = addNode("CLOCK", 60, 168), c = addNode("CNT4", 168, 84);
   var d = addNode("HEXD", 324, 120), co = addNode("LAMP", 336, 228), i;
   k.l = "CLK"; co.l = "Carry";

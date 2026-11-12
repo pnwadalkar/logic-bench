@@ -87,7 +87,7 @@ export function newSheet(kind){
   if (S.testMode) setTest(false);
   if (!leaveShared()) pushUndo();
   setKind(kind);
-  S.nodes = []; S.wires = []; clearPick(); S.pend = null; S.wiring = null; S.marq = null;
+  S.nodes = []; S.wires = []; S.localAreas = {}; clearPick(); S.pend = null; S.wiring = null; S.marq = null;
   S.cascade = 0; S.pan = {x:0, y:0}; S.zoom = S.ZDEF;
   S.docName = suggestName(); S.docDirty = false;
   reindex(); evaluate(); draw(); saveCur();
@@ -154,7 +154,7 @@ export function backToMine(){
   if (cur && cur.doc && load(cur.doc)){ S.docName = cur.doc.name || suggestName(); S.docDirty = !!cur.dirty; }
   else {
     setKind("classical");
-    S.nodes = []; S.wires = []; clearPick(); S.pend = null; S.wiring = null; S.marq = null;
+    S.nodes = []; S.wires = []; S.localAreas = {}; clearPick(); S.pend = null; S.wiring = null; S.marq = null;
     S.pan = {x:0, y:0}; S.zoom = S.ZDEF; reindex();
     S.docName = suggestName(); S.docDirty = false;
   }

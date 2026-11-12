@@ -144,17 +144,19 @@ function cleanState(body) {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "Nothing to save.");
   const lib = body.lib && typeof body.lib === "object" && !Array.isArray(body.lib) ? body.lib : {};
   if (Object.keys(lib).length > 400) throw new HttpError(413, "Too many builds to save.");
+  const areas = body.areas && typeof body.areas === "object" && !Array.isArray(body.areas) ? body.areas : {};
+  if (Object.keys(areas).length > 400) throw new HttpError(413, "Too many chips to save.");
   let cur = null;
   if (body.cur && typeof body.cur === "object" && body.cur.doc && typeof body.cur.doc === "object") {
     cur = { doc: body.cur.doc, dirty: !!body.cur.dirty };
   }
-  return { lib: lib, cur: cur };
+  return { lib: lib, cur: cur, areas: areas };
 }
 
 async function readState(user) {
   const row = await guard(function () { return store.readJson(stateKey(user.id)); });
-  if (!row) return { lib: {}, cur: null, rev: 0 };
-  return { lib: row.lib || {}, cur: row.cur || null, rev: row.rev || 0 };
+  if (!row) return { lib: {}, cur: null, areas: {}, rev: 0 };
+  return { lib: row.lib || {}, cur: row.cur || null, areas: row.areas || {}, rev: row.rev || 0 };
 }
 
 /* body.base is the rev the device last saw. If another device has saved since,
@@ -165,12 +167,13 @@ async function writeState(user, body) {
   const have = prev && prev.rev || 0;
   if (typeof body.base === "number" && body.base !== have) {
     const err = new HttpError(409, "Saved from another device since.");
-    err.body = { error: err.message, lib: prev.lib || {}, cur: prev.cur || null, rev: have };
+    err.body = { error: err.message, lib: prev.lib || {}, cur: prev.cur || null, areas: prev.areas || {}, rev: have };
     throw err;
   }
   const next = {
     lib: clean.lib,
     cur: clean.cur,
+    areas: clean.areas,
     rev: (prev && prev.rev || 0) + 1,
     updated: Date.now()
   };

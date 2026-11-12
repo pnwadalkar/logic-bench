@@ -825,6 +825,55 @@ export function route(){
   });
   return made;
 }
+/* ---------- wiring check ----------
+   The Cleaner only ever moves parts and redraws corners — it must never change
+   what drives what. This is the proof: every real part's input is traced back
+   through any chain of junctions to the real outputs feeding it (a junction can
+   have more than one driver tied to it, so the net is the whole set), and the
+   result is a signature of the circuit's actual wiring, with every scrap of
+   geometry left out. Taken before the passes run and again after, the two must
+   read the same — if they don't, a pass broke something, and cleanUp() below
+   puts the sheet back exactly as it was rather than hand back a broken circuit. */
+export function wireSignature(){
+  var parent = new Map();
+  var find = function(x){
+    var r = x;
+    while (parent.get(r) !== r) r = parent.get(r);
+    return r;
+  };
+  var ensure = function(x){ if (!parent.has(x)) parent.set(x, x); return x; };
+  var union = function(x, y){
+    ensure(x); ensure(y);
+    var rx = find(x), ry = find(y);
+    if (rx !== ry) parent.set(rx, ry);
+  };
+  var keyOut = function(id, q){ var n = byId.get(id); return (n && isPt(n)) ? "P:" + id : "O:" + id + ":" + (q | 0); };
+  var keyIn = function(id, p){ var n = byId.get(id); return (n && isPt(n)) ? "P:" + id : "I:" + id + ":" + p; };
+  var i, w, n, ins, p, k, r, outs, groups = new Map(), sig = [];
+  for (i = 0; i < S.wires.length; i++){
+    w = S.wires[i];
+    if (!w.a || !w.b) continue;
+    union(keyOut(w.a, w.q), keyIn(w.b, w.p));
+  }
+  parent.forEach(function(v, key){
+    r = find(key);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(key);
+  });
+  for (i = 0; i < S.nodes.length; i++){
+    n = S.nodes[i];
+    if (isPt(n)) continue;
+    ins = nIn(n);
+    for (p = 0; p < ins; p++){
+      k = "I:" + n.id + ":" + p;
+      r = parent.has(k) ? find(k) : null;
+      outs = r ? groups.get(r).filter(function(s){ return s.charAt(0) === "O"; }).sort() : [];
+      sig.push(n.id + "#" + p + "=" + outs.join(","));
+    }
+  }
+  sig.sort();
+  return sig.join("|");
+}
 export function bounds(){
   var i, w, n, b, r = null, add = function(x, y, x2, y2){
     if (!r) r = {x:x, y:y, x2:x2, y2:y2};
@@ -1004,6 +1053,8 @@ export function cleanUp(sure){
     return;
   }
   pushUndo();
+  var preDoc = snapshot();
+  var preSig = wireSignature();
   var was = area(bounds());
   /* A wire with nothing at either end belongs to no part, so the layout has nothing
      to hold it to. It is set aside while the parts are laid out, then squared and
@@ -1064,6 +1115,17 @@ export function cleanUp(sure){
      whatever some round's pass refused halfway through laying it out. */
   var corners = route();
   if (orphans.length) layOrphans(orphans);
+  /* the proof: the circuit this round drew must wire up exactly as the one it
+     started from did. A mismatch means a pass broke a connection, so the sheet
+     goes back to how it stood before Clean was pressed rather than hand back a
+     circuit that no longer does what it did. */
+  if (wireSignature() !== preSig){
+    S.undoStack.pop();
+    load(preDoc);
+    commit();
+    flash("Cleaner found its own tidy-up had changed the wiring, so it put the sheet back as it was.");
+    return;
+  }
   var r = bounds();
   if (r){ S.pan.x = 48 - r.x * S.zoom; S.pan.y = 40 - r.y * S.zoom; }
   clearPick(); S.pend = null; S.wiring = null; S.wend = null; S.marq = null;

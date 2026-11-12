@@ -79,6 +79,12 @@ button.danger:hover{border-color:var(--hot);color:var(--hot)}
   border-radius:50%;border-color:var(--grid);background:var(--panel);color:var(--muted);opacity:0}
 .part:hover .x,.part .x:focus-visible{opacity:1}
 @media (pointer:coarse){.part .x{opacity:1}}
+/* whether a saved chip is on the account's shelf (∀) or kept with this build alone (1) */
+.part .scope{position:absolute;top:1px;left:1px;padding:0;width:16px;height:16px;line-height:14px;font-size:9px;
+  border-radius:50%;border-color:var(--grid);background:var(--panel);color:var(--muted);opacity:0}
+.part .scope.on{color:var(--accent);border-color:var(--accent)}
+.part:hover .scope,.part .scope:focus-visible{opacity:1}
+@media (pointer:coarse){.part .scope{opacity:1}}
 .empty{margin:0;max-width:300px;align-self:center;font:400 11px/1.5 var(--sans);color:var(--muted)}
 /* a rail tool with nothing loaded into it yet */
 .part.off{opacity:.4}

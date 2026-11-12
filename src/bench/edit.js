@@ -315,7 +315,12 @@ export function setPasteMode(on){
 /* ---------- saved areas ---------- */
 /* A circuit you boxed in can be named and kept on the Electronics tab as a chip
    (see defineUserChip in core.js), then dragged out again as often as you like.
-   They are kept in this browser, per account. */
+
+   A chip lives in one of two shelves: the account's own, kept in this browser
+   (and synced to the account, see auth.js) so it shows up on every build you
+   open — or this build's own, kept with the build itself (snapshot/load in
+   builds.js) so it shows up only here. Either way it is yours to move between
+   the two afterwards, from the shelf tile. */
 export function areaRead(){
   try {
     var o = JSON.parse(localStorage.getItem(Auth.key("areas")) || "{}");
@@ -323,13 +328,39 @@ export function areaRead(){
   } catch (err) { return {}; }
 }
 export function areaWrite(o){
-  try { localStorage.setItem(Auth.key("areas"), JSON.stringify(o)); return true; }
+  try { localStorage.setItem(Auth.key("areas"), JSON.stringify(o)); Auth.changed(); return true; }
   catch (err) { return false; }
 }
-/* the saved names, oldest first, so a new one lands at the end of the shelf */
+export function localAreaRead(){ return (S.localAreas && typeof S.localAreas === "object") ? S.localAreas : {}; }
+export function localAreaWrite(o){ S.localAreas = o; saveCur(); return true; }
+/* where a name is kept: the account's shelf, unless it is only this build's own */
+export function areaScope(name){ return localAreaRead()[name] ? "project" : "global"; }
+export function areaEntry(name){ return areaRead()[name] || localAreaRead()[name]; }
+/* the saved names, oldest first, so a new one lands at the end of the shelf.
+   A build's own chips and the account's own are shown together — a name used
+   by both shows the build's own, since that is the one in front of you. */
 export function areaNames(){
-  var o = areaRead();
+  var g = areaRead(), l = localAreaRead(), o = {}, k;
+  for (k in g) o[k] = g[k];
+  for (k in l) o[k] = l[k];
   return Object.keys(o).sort(function(a, b){ return (o[a].at || 0) - (o[b].at || 0); });
+}
+/* Move a chip between the account's shelf and this build's own. Moving a global
+   chip to "this project only" takes it off every other build's shelf; moving a
+   project chip to "every project" puts it on the account's. */
+export function setAreaScope(name, scope){
+  var g = areaRead(), l = localAreaRead(), entry = g[name] || l[name];
+  if (!entry) return;
+  if (scope === "project"){
+    if (g[name]){ delete g[name]; areaWrite(g); }
+    l[name] = entry; localAreaWrite(l);
+    flash("“" + name + "” is kept with this build only — it won't show up in your other projects.");
+  } else {
+    if (l[name]){ delete l[name]; localAreaWrite(l); }
+    g[name] = entry; areaWrite(g);
+    flash("“" + name + "” is on your account's shelf — every project you open can use it.");
+  }
+  notify();
 }
 export function showShelf(){
   for (var i = 0; i < S.CATS.length; i++) if (S.CATS[i].u) setCat(i);
@@ -343,7 +374,7 @@ export function setCat(k){
 /* A saved area is a chip: the part type made from it, made the first time it is
    asked for (areas saved before chips existed get theirs here too). */
 export function areaKey(name, a){
-  a = a || areaRead()[name];
+  a = a || areaEntry(name);
   if (!a || !a.clip || !Array.isArray(a.clip.nodes) || !Array.isArray(a.clip.wires)) return null;
   return defineUserChip(name, a.clip);
 }
@@ -364,10 +395,11 @@ export function saveArea(){
         (nIns === 1 ? "Its 1 switch becomes its input" : "Its " + nIns + " switches become its inputs") + " (named " +
         (pins.pi.join(", ") || "—") + ") and " +
         (nOuts === 1 ? "its 1 lamp its output" : "its " + nOuts + " lamps its outputs") + " (named " +
-        (pins.po.join(", ") || "—") + ").",
+        (pins.po.join(", ") || "—") + "). It goes on your account's shelf, so every project can use it — " +
+        "the ⟲ on its tile keeps it to this build only instead.",
     check:function(v){
       if (!v) return "Give the chip a name.";
-      if (areaRead()[v]) return "There's already a chip called “" + v + "” — pick another name.";
+      if (areaRead()[v] || localAreaRead()[v]) return "There's already a chip called “" + v + "” — pick another name.";
       return "";
     },
     done:function(v){
@@ -383,7 +415,9 @@ export function askDeleteArea(name){
   ask({title:"Delete chip", ok:"Delete", danger:true,
     msg:"Delete the saved chip “" + name + "”? Copies already on the sheet stay.",
     done:function(){
-      var o = areaRead(); delete o[name]; areaWrite(o);
+      var g = areaRead(), l = localAreaRead();
+      if (g[name]){ delete g[name]; areaWrite(g); }
+      if (l[name]){ delete l[name]; localAreaWrite(l); }
       notify();
       flash("Deleted “" + name + "”");
     }});

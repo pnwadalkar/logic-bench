@@ -204,6 +204,38 @@ export function chipHash(s){
   for (i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);
 }
+/* A pin's label split into its letter prefix and its trailing number, so A0..A3
+   are seen as one bus called "A" rather than four unrelated names. A label with
+   no trailing digit (Carry, EN…) has no number, and stands for itself. */
+export function pinSplit(label){
+  var m = /^([^\d]*)(\d+)$/.exec(String(label || ""));
+  return m ? {pre:m[1].toLowerCase(), num:+m[2]} : {pre:String(label || "").toLowerCase(), num:null};
+}
+/* The parts of one side (inputs or outputs) of a chip, grouped by bus: every A0..A3
+   stands together, in the order the first of them was found, each bus itself in
+   ascending number — so a sheet drawn A0, B0, A1, B1 still comes out A0, A1, B0, B1,
+   and a lamp named Carry sitting in the middle of Z0..Z3 comes out after all of them
+   rather than between two of them. A label with no number is its own bus of one,
+   and keeps the place the position sort gave it. */
+export function pinGroup(list, keyOf){
+  var order = [], groups = {}, i, k;
+  for (i = 0; i < list.length; i++){
+    k = keyOf(list[i]);
+    if (!groups[k]){ groups[k] = []; order.push(k); }
+    groups[k].push(list[i]);
+  }
+  var out = [];
+  order.forEach(function(key){
+    var g = groups[key];
+    g.sort(function(a, b){
+      var pa = pinSplit(keyOf.label(a)), pb = pinSplit(keyOf.label(b));
+      if (pa.num === null || pb.num === null) return 0;      /* no number to go by: leave as found */
+      return pa.num - pb.num;
+    });
+    out = out.concat(g);
+  });
+  return out;
+}
 /* the pins of a clip: which of its parts are inputs and which are outputs, in the
    order they stand, with a name for each that no other pin has */
 export function chipPins(clip){
@@ -217,6 +249,12 @@ export function chipPins(clip){
     return clip.nodes[a].y - clip.nodes[b].y || clip.nodes[a].x - clip.nodes[b].x || a - b;
   };
   ins.sort(order); outs.sort(order);
+  var keyOf = function(ix){
+    var p = pinSplit(clip.nodes[ix].l);
+    return p.pre + (p.num === null ? "\u0000" + ix : "");      /* no number: a bus of its own */
+  };
+  keyOf.label = function(ix){ return clip.nodes[ix].l; };
+  ins = pinGroup(ins, keyOf); outs = pinGroup(outs, keyOf);
   var name = function(list, fallback){
     var seen = {}, out = [];
     list.forEach(function(ix, k){
@@ -252,6 +290,9 @@ export function defineUserChip(name, clip){
   return key;
 }
 
+/* Chips made for this build only — not on the account-wide shelf, so they show
+   up while this build is open and nowhere else (see localAreaRead in edit.js). */
+S.localAreas = {};
 S.nodes = []; S.wires = []; S.seq = 1; S.pan = {x:0,y:0};
 export var byId = new Map(); S.drag = null; S.wiring = null; S.panning = null; S.cascade = 0;
 S.wireMode = false; S.pend = null; S.cursor = {x:0,y:0}; S.wend = null;

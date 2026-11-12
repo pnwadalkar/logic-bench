@@ -122,6 +122,7 @@ export var Auth = (function(){
   function adopt(id, data){
     rawSet(ckey(id, "lib"), data.lib || {});
     if (data.cur) rawSet(ckey(id, "cur"), data.cur); else rawDel(ckey(id, "cur"));
+    rawSet(ckey(id, "areas"), data.areas || {});   /* the account's chip shelf, see edit.js */
     sync.rev = data.rev || 0;
     rawSet(ckey(id, "rev"), sync.rev);
   }
@@ -150,6 +151,7 @@ export var Auth = (function(){
       if (dirty || claimed){
         mine = readKey(ckey(id, "lib"), {});
         rawSet(ckey(id, "lib"), mergeLib(mine, data.lib || {}));
+        rawSet(ckey(id, "areas"), mergeLib(readKey(ckey(id, "areas"), {}), data.areas || {}));
         if (!readKey(ckey(id, "cur"), null) && data.cur) rawSet(ckey(id, "cur"), data.cur);
         sync.rev = data.rev || 0; rawSet(ckey(id, "rev"), sync.rev);
         me.changed();
@@ -169,7 +171,8 @@ export var Auth = (function(){
     var id = cloudUser && cloudUser.id, gen = sync.gen, body;
     if (!id || sync.busy) return Promise.resolve();
     if (!rawGet(ckey(id, "dirty"), false)) return Promise.resolve();
-    body = {lib:readKey(ckey(id, "lib"), {}), cur:readKey(ckey(id, "cur"), null), base:sync.rev};
+    body = {lib:readKey(ckey(id, "lib"), {}), cur:readKey(ckey(id, "cur"), null),
+      areas:readKey(ckey(id, "areas"), {}), base:sync.rev};
     sync.busy = true; setState("saving");
     return api("/api/state", "POST", body, keepalive && JSON.stringify(body).length < 60000).then(function(out){
       sync.busy = false; sync.retry = 0;
@@ -181,6 +184,7 @@ export var Auth = (function(){
       if (e.status === 409 && e.data){
         /* another device saved first: take in its builds and send the two together */
         rawSet(ckey(id, "lib"), mergeLib(readKey(ckey(id, "lib"), {}), e.data.lib || {}));
+        rawSet(ckey(id, "areas"), mergeLib(readKey(ckey(id, "areas"), {}), e.data.areas || {}));
         if (!readKey(ckey(id, "cur"), null) && e.data.cur) rawSet(ckey(id, "cur"), e.data.cur);
         sync.rev = e.data.rev || 0; rawSet(ckey(id, "rev"), sync.rev);
         if (typeof onMerged === "function") onMerged();
