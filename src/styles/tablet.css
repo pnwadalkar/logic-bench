@@ -10,8 +10,8 @@
 
 [data-layout="tablet"] #main{flex-direction:column}
 [data-layout="tablet"] #rail{order:2;border-top:1px solid var(--grid);
-  display:flex;flex-wrap:nowrap;align-items:flex-start;column-gap:18px;row-gap:8px;
-  overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;
+  display:flex;flex-direction:column;flex-wrap:nowrap;align-items:flex-start;row-gap:8px;
+  overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;
   max-height:38vh;max-height:38dvh;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   padding-top:9px;padding-bottom:max(9px,env(safe-area-inset-bottom,0px))}
@@ -26,7 +26,6 @@
 [data-layout="tablet"] .part canvas{width:56px!important;height:38px!important}
 
 @media (max-width:620px){
-  [data-layout="tablet"] #rail{column-gap:14px}
   [data-layout="tablet"] .grp{display:none}
   [data-layout="tablet"] .part span{display:none}
   [data-layout="tablet"] .part{padding:5px;min-width:0}
