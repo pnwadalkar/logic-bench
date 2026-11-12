@@ -10,7 +10,7 @@
 [data-layout="desktop"] #main{flex-direction:column}
 [data-layout="desktop"] #rail{order:2;border-top:1px solid var(--grid);
   display:flex;flex-wrap:wrap;align-items:flex-start;column-gap:24px;row-gap:8px;
-  overflow-x:auto;overflow-y:auto;max-height:40vh;max-height:40dvh;
+  overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;max-height:40vh;max-height:40dvh;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
   padding-top:8px;padding-bottom:max(8px,env(safe-area-inset-bottom,0px))}
 [data-layout="desktop"] #rail .gp{flex:none}

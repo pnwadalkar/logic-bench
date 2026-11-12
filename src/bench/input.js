@@ -69,6 +69,17 @@ export function zoomFit(){
 export function onWheel(e){
   e.preventDefault();
   var r = S.cv.getBoundingClientRect();
+  /* sideways scrolling (a trackpad swipe, a tilt wheel, or Shift + wheel) moves the
+     sheet instead of zooming it, so a circuit that runs past the window is reachable.
+     Ctrl/Cmd + wheel, and a trackpad pinch, still zoom. */
+  if (!e.ctrlKey && !e.metaKey && (e.shiftKey || e.deltaX !== 0)){
+    var k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1;
+    var dx = (e.shiftKey && e.deltaX === 0 ? e.deltaY : e.deltaX) * k;
+    var dy = (e.shiftKey ? 0 : e.deltaY) * k;
+    S.pan.x -= dx; S.pan.y -= dy;
+    closeRename(); draw(); saveCur();
+    return;
+  }
   zoomAt(S.zoom * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
 }
 /* Two fingers pinch. The second finger down turns whatever the first one began

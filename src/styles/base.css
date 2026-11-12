@@ -38,6 +38,11 @@ header{background:var(--panel);border-bottom:1px solid var(--grid);flex:none}
   padding-left:max(16px,env(safe-area-inset-left,0px));
   padding-right:max(16px,env(safe-area-inset-right,0px));
   padding-block:9px}
+/* on a narrow screen the header stays one row and scrolls sideways, so no button is cut off or crowds the sheet */
+@media (max-width:900px){
+  .bar{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-width:thin}
+  .bar>*{flex-shrink:0}
+}
 h1{margin:0;font:600 14px/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase}
 h1 em{font-style:normal;color:var(--accent)}
 #docname{flex:none;width:128px;min-width:0;margin-left:4px;font:500 11px var(--mono);color:var(--fg);
@@ -64,7 +69,7 @@ button.danger:hover{border-color:var(--hot);color:var(--hot)}
 .grp{font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 #rail .set{display:flex;gap:4px}
 .part{position:relative;display:flex;align-items:center;border:1px solid transparent;
-  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  cursor:grab;touch-action:pan-x;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .part:hover{border-color:var(--line);background:var(--canvas)}
 .part.on{border-color:var(--accent);background:var(--canvas)}
 .part.on span{color:var(--accent)}

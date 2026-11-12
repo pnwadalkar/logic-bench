@@ -14,12 +14,38 @@ function Icon({ draw, what, colors }) {
   return <canvas ref={ref} style={{ width: 50, height: 34 }} />;
 }
 
+/* A mouse takes a tile at once. A finger could be after either of two things: to
+   slide the console sideways (its tiles run past the screen edge) or to pull a part
+   off it. So a touch waits to see which way the finger goes: up or down, it takes the
+   part; sideways, the browser scrolls the console and the tile is left alone; no move
+   at all is a tap. */
+function press(e, onDown) {
+  if (e.pointerType !== "touch") { onDown(e); return; }
+  const x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+  const done = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    window.removeEventListener("pointercancel", done);
+  };
+  const move = (m) => {
+    if (m.pointerId !== id) return;
+    const dx = m.clientX - x0, dy = m.clientY - y0;
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    done();
+    if (Math.abs(dy) > Math.abs(dx)) onDown(m);
+  };
+  const up = (u) => { if (u.pointerId !== id) return; done(); onDown(u); };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+  window.addEventListener("pointercancel", done);
+}
+
 /* One tile of the console. It answers the press, not the click: a part is taken
    hold of the moment it is touched and rides out onto the sheet under the pointer. */
 function Tile({ t, label, tip, draw, what, on, off, onDown, children }) {
   return (
     <div className={"part" + (on ? " on" : "") + (off ? " off" : "")} data-t={t} title={tip || label}
-      onPointerDown={(e) => { e.preventDefault(); onDown(e); }}>
+      onPointerDown={(e) => { e.preventDefault(); press(e, onDown); }}>
       <Icon draw={draw} what={what || t} colors={S.colorsRev} />
       <span>{label}</span>
       {children}

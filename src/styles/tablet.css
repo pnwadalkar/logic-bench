@@ -10,7 +10,7 @@
 
 [data-layout="tablet"] #main{flex-direction:column}
 [data-layout="tablet"] #rail{order:2;border-top:1px solid var(--grid);
-  display:flex;flex-wrap:wrap;align-items:flex-start;column-gap:18px;row-gap:8px;
+  display:flex;flex-wrap:nowrap;align-items:flex-start;column-gap:18px;row-gap:8px;
   overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x;
   max-height:38vh;max-height:38dvh;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
@@ -30,6 +30,5 @@
   [data-layout="tablet"] .grp{display:none}
   [data-layout="tablet"] .part span{display:none}
   [data-layout="tablet"] .part{padding:5px;min-width:0}
-  [data-layout="tablet"] #rail .set{flex-wrap:wrap}
   :where([data-layout="tablet"]) button{padding:8px 7px}
 }
