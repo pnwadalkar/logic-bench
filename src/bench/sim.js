@@ -188,6 +188,21 @@ export function chipInside(n){
   });
   t.inIx.forEach(function(i){ s.ins.push(pre + i); });
   t.outIx.forEach(function(i){ s.outs.push(pre + i); });
+  /* a pin that belongs to a part inside (an adder's Cin, with no switch behind it) gets
+     a junction of its own: the pin feeds it, and it feeds that part's input — or, for an
+     output, it reads that part's output */
+  (t.xin || []).forEach(function(x, k){
+    var id = pre + "xi" + k;
+    s.nodes.push({id:id, t:"POINT", x:0, y:0, v:0, s:0, l:"", iv:[]});
+    s.wires.push({id:id + "w", a:id, q:0, b:pre + x.ix, p:x.p});
+    s.ins.push(id);
+  });
+  (t.xout || []).forEach(function(x, k){
+    var id = pre + "xo" + k;
+    s.nodes.push({id:id, t:"POINT", x:0, y:0, v:0, s:0, l:"", iv:[]});
+    s.wires.push({id:id + "w", a:pre + x.ix, q:x.q, b:id, p:0});
+    s.outs.push(id);
+  });
   c.wires.forEach(function(cw){
     if (cw.a === null || cw.b === null) return;          /* a loose end carries nothing */
     s.wires.push({id:pre + "w" + s.wires.length, a:pre + cw.a, q:cw.q | 0, b:pre + cw.b, p:cw.p | 0});

@@ -385,17 +385,20 @@ export function saveArea(){
   var c = clipFrom();
   if (!c){ flash("Nothing to save there."); return; }
   var pins = chipPins(c);
-  if (!pins.ins.length && !pins.outs.length){
-    flash("This area has no switches or lamps to make pins from — put a switch inside it for every input, a lamp for every output.");
+  if (!pins.pi.length && !pins.po.length){
+    flash("This area has nothing to make pins from — put a switch inside it for every input and a lamp for every output, or leave a part's input or output open.");
     return;
   }
-  var nIns = pins.ins.length, nOuts = pins.outs.length;
+  var nIns = pins.pi.length, nOuts = pins.po.length;
+  var pinList = function(a){ return a.length > 12 ? a.slice(0, 12).join(", ") + " … " + a[a.length - 1] : (a.join(", ") || "—"); };
   ask({title:"Save as a chip", ok:"Save", value:"",
     msg:"Give this chip a name. It goes on the Electronics tab as a black chip with the name on top. " +
-        (nIns === 1 ? "Its 1 switch becomes its input" : "Its " + nIns + " switches become its inputs") + " (named " +
-        (pins.pi.join(", ") || "—") + ") and " +
-        (nOuts === 1 ? "its 1 lamp its output" : "its " + nOuts + " lamps its outputs") + " (named " +
-        (pins.po.join(", ") || "—") + "). It goes on your account's shelf, so every project can use it — " +
+        "Its inputs are the switches in the area and every input of a part that nothing in the area drives — " +
+        "so two 4-bit adders joined by Cin make an 8-bit adder with no switches. " +
+        "Its outputs are the lamps and every output nothing in the area reads. " +
+        "This one has " + (nIns === 1 ? "1 input" : nIns + " inputs") + " (" + pinList(pins.pi) + ") and " +
+        (nOuts === 1 ? "1 output" : nOuts + " outputs") + " (" + pinList(pins.po) + "). " +
+        "It goes on your account's shelf, so every project can use it — " +
         "the ⟲ on its tile keeps it to this build only instead.",
     check:function(v){
       if (!v) return "Give the chip a name.";

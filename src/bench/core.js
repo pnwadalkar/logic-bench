@@ -255,18 +255,94 @@ export function chipPins(clip){
   };
   keyOf.label = function(ix){ return clip.nodes[ix].l; };
   ins = pinGroup(ins, keyOf); outs = pinGroup(outs, keyOf);
-  var name = function(list, fallback){
+  var open = openPins(clip);
+  var name = function(labels, fallback){
     var seen = {}, out = [];
-    list.forEach(function(ix, k){
-      var base = String(clip.nodes[ix].l || "").replace(/[s=~]+/g, "").slice(0, 8) || fallback(k), nm = base, c = 2;
+    labels.forEach(function(l, k){
+      var base = String(l || "").replace(/[s=~]+/g, "").slice(0, 8) || fallback(k), nm = base, c = 2;
       while (seen[nm]) nm = base + (c++);
       seen[nm] = 1; out.push(nm);
     });
     return out;
   };
-  return {ins:ins, outs:outs,
-    pi:name(ins, function(k){ return k < 26 ? String.fromCharCode(65 + k) : "I" + k; }),
-    po:name(outs, function(k){ return "Q" + (k + 1); })};
+  var lab = function(ix){ return clip.nodes[ix].l; }, tag = function(x){ return x.label; };
+  return {ins:ins, outs:outs, xin:open.ins, xout:open.outs,
+    pi:name(ins.map(lab).concat(open.ins.map(tag)), function(k){ return k < 26 ? String.fromCharCode(65 + k) : "I" + k; }),
+    po:name(outs.map(lab).concat(open.outs.map(tag)), function(k){ return "Q" + (k + 1); })};
+}
+/* The pins a saved area gets from the parts inside it that are not switches or lamps.
+   Box in two 4-bit adders, wire one's Cout to the other's Cin, and every input of the
+   pair that nothing inside the box drives is an input of the new chip, and every output
+   that nothing inside the box reads is an output of it — no switch or lamp needed.
+
+   Where several parts offer the same bus (A0..A3 of one adder, A0..A3 of the next) the
+   later ones are numbered on from the earlier, in the order the signal passes through
+   them, so two 4-bit adders carried through Cin come out as one 8-bit one: A0..A7,
+   B0..B7, Cin in; S0..S7, Cout out. Pins that are open on the part but have a default
+   (Cin reads 0 when left open) keep it. A part with nothing driving it that is a
+   source (a switch, clock, power rail) is not given a pin: it is its own source. */
+export function openPins(clip){
+  var driven = {}, used = {}, depth = [], rank = [], i, k, p, q, w, n, d, changed, ins = [], outs = [];
+  clip.wires.forEach(function(cw){
+    if (cw.a === null || cw.b === null || cw.a === undefined || cw.b === undefined) return;
+    driven[cw.b + ":" + (cw.p | 0)] = 1;
+    used[cw.a + ":" + (cw.q | 0)] = 1;
+  });
+  for (i = 0; i < clip.nodes.length; i++) depth.push(0);
+  for (k = 0; k < clip.nodes.length; k++){
+    changed = false;
+    clip.wires.forEach(function(cw){
+      if (cw.a === null || cw.b === null || cw.a === undefined || cw.b === undefined) return;
+      if (depth[cw.b] < depth[cw.a] + 1 && depth[cw.a] < clip.nodes.length){ depth[cw.b] = depth[cw.a] + 1; changed = true; }
+    });
+    if (!changed) break;
+  }
+  for (i = 0; i < clip.nodes.length; i++) rank.push(i);
+  /* the order the signal passes through the parts, then top to bottom, then left to right */
+  rank.sort(function(a, b){
+    return depth[a] - depth[b] || clip.nodes[a].y - clip.nodes[b].y || clip.nodes[a].x - clip.nodes[b].x || a - b;
+  });
+  rank.forEach(function(ix, order){
+    n = clip.nodes[ix]; d = TYPES[n.t];
+    if (!d || n.t === "POINT" || n.t === "SWITCH" || n.t === "BUTTON" || n.t === "LAMP") return;
+    for (p = 0; p < (d.ins | 0); p++)
+      if (!driven[ix + ":" + p])
+        ins.push({ix:ix, p:p, part:order, label:(d.pn && d.pn[p]) || "", def:d.pd ? d.pd[p] : undefined});
+    if (!(d.ins > 0) || d.ctl) return;
+    q = d.outs === undefined ? 1 : d.outs;
+    for (k = 0; k < q; k++)
+      if (!used[ix + ":" + k]) outs.push({ix:ix, q:k, part:order, label:(d.po && d.po[k]) || ""});
+  });
+  return {ins:busOrder(ins), outs:busOrder(outs)};
+}
+/* Number the buses of several parts on from one another, then stand each bus together
+   in ascending order (the same grouping a chip's switches get). */
+export function busOrder(list){
+  var by = {}, seq = 0, keyOf;
+  list.forEach(function(x){
+    var s = pinSplit(x.label), m = /^(.*?)(\d+)$/.exec(String(x.label)), g;
+    if (s.num === null) return;
+    g = by[s.pre] || (by[s.pre] = {parts:[], at:{}});
+    if (!g.at[x.part]){ g.at[x.part] = {max:-1}; g.parts.push(x.part); }
+    g.at[x.part].max = Math.max(g.at[x.part].max, s.num);
+    x.stem = m ? m[1] : "";
+    x.num = s.num;
+  });
+  Object.keys(by).forEach(function(pre){
+    var g = by[pre], run = 0;
+    g.parts.forEach(function(part){ g.at[part].off = run; run += g.at[part].max + 1; });
+  });
+  list.forEach(function(x){
+    var s = pinSplit(x.label);
+    if (s.num === null) return;
+    x.label = x.stem + (by[s.pre].at[x.part].off + x.num);
+  });
+  keyOf = function(x){
+    var s = pinSplit(x.label);
+    return s.pre + (s.num === null ? "\u0000" + (seq++) : "");
+  };
+  keyOf.label = function(x){ return x.label; };
+  return pinGroup(list, keyOf);
 }
 export function chipKey(name, clip){
   return "U:" + name + "#" + chipHash(JSON.stringify([clip.nodes.map(function(n){ return [n.t, n.x, n.y, n.l, n.s]; }),
@@ -280,8 +356,11 @@ export function defineUserChip(name, clip){
   p.pi.forEach(function(s){ li = Math.max(li, s.length); });
   p.po.forEach(function(s){ lo = Math.max(lo, s.length); });
   nameW = Math.ceil(name.length * 7.2 + 14);
-  d = TYPES[key] = {n:name, k:"chip", user:1, ab:name, clip:clip, inIx:p.ins, outIx:p.outs,
-    pi:p.pi.map(function(s){ return s + "=0"; }), po:p.po,
+  /* pins after the switches and lamps' own come from open pins on parts inside (see
+     openPins): inIx/outIx are the switches and lamps, xin/xout those open pins, and a
+     pin left open reads what the part it belongs to reads when left open */
+  d = TYPES[key] = {n:name, k:"chip", user:1, ab:name, clip:clip, inIx:p.ins, outIx:p.outs, xin:p.xin, xout:p.xout,
+    pi:p.pi.map(function(s, k){ var x = p.xin[k - p.ins.length]; return s + "=" + (x && x.def === 1 ? 1 : 0); }), po:p.po,
     tip:name + " — a chip you made: " + p.pi.length + " input" + (p.pi.length === 1 ? "" : "s") + ", " +
         p.po.length + " output" + (p.po.length === 1 ? "" : "s")};
   /* wide enough for the name on the lid as well as the pin names either side */

@@ -2,7 +2,7 @@
 import { S, ask, flash, notify } from "./state.js";
 import { load, snapshot } from "./builds.js";
 import { Collab } from "./collab.js";
-import { GRID, PTR, SNAP, STUB, box, byId, hasOut, inPort, isPt, nIn, newId, outPort } from "./core.js";
+import { GRID, PTR, SNAP, STUB, box, byId, hasOut, inPort, isPt, nIn, newId, outPort, pinGroup, pinSplit } from "./core.js";
 import { addNode, commit, pushUndo } from "./edit.js";
 import { closeRename } from "./input.js";
 import { draw, render } from "./render.js";
@@ -242,7 +242,7 @@ export function idRank(n){ return parseInt(String(n.id).replace(/\D+/g, ""), 10)
        second press reads back the same pins and lays down the same sheet. */
 var pin = new Map();
 export function pinInputs(){
-  var list = [], i, n;
+  var list = [], i, n, keyOf;
   pin = new Map();
   for (i = 0; i < S.nodes.length; i++){
     n = S.nodes[i];
@@ -251,6 +251,17 @@ export function pinInputs(){
   list.sort(function(p, q){
     return box(p).y - box(q).y || box(p).x - box(q).x || idRank(p) - idRank(q);
   });
+  /* The order is then the one a saved chip gives its pins (see pinGroup in core.js):
+     every A0..A3 together and counting up, a bus standing where its first member was
+     found on the sheet, a switch with no number a bus of its own and left where it
+     stood. A bus drawn A0, B0, A1, B1 comes out A0, A1, B0, B1 — and the same on every
+     press, because the order read back off a tidied sheet groups the same way. */
+  keyOf = function(n){
+    var sp = pinSplit(n.l);
+    return sp.pre + (sp.num === null ? " " + n.id : "");
+  };
+  keyOf.label = function(n){ return n.l; };
+  list = pinGroup(list, keyOf);
   for (i = 0; i < list.length; i++) pin.set(list[i].id, i);
 }
 /* The pinned parts of one column put back in pin order, every other part left in
@@ -504,13 +515,45 @@ export function unstack(R){
       over in slots that were already theirs. A run left on a slant by a swap is
       squared off by pass 6 along with every other slant. */
 export function orderInputs(){
-  var list = [], tops = [], i;
+  var list = [], tops = [], i, floor = -Infinity;
   for (i = 0; i < S.nodes.length; i++) if (pin.has(S.nodes[i].id)) list.push(S.nodes[i]);
   if (list.length < 2) return;
   for (i = 0; i < list.length; i++) tops.push(box(list[i]).y);
   tops.sort(function(p, q){ return p - q; });
   list.sort(function(p, q){ return pin.get(p.id) - pin.get(q.id); });
-  for (i = 0; i < list.length; i++) list[i].y = tops[i] + boxOffY(list[i]);
+  /* The inputs are not all one height — a power rail is a little shorter than a
+     switch, a hex input is a good deal taller — so a slot cut for one part can be
+     too small for the one dealt into it. Each part therefore stands at its slot or
+     just below the part above it, whichever is lower. When they are all one height
+     (nearly always) every part lands exactly on its slot and nothing moves. */
+  for (i = 0; i < list.length; i++){
+    list[i].y = Math.max(tops[i], floor) + boxOffY(list[i]);
+    floor = Math.round((box(list[i]).y + box(list[i]).h + ROWGAP) / SNAP) * SNAP;
+  }
+}
+/* Last of all, a safety net for anything still lying on top of something else: the
+   lower of the two is moved down, a part at a time, until the sheet has no two
+   bodies sharing a spot. Nothing is moved when nothing overlaps, so it cannot
+   disturb a layout that is already clear. */
+export function clearOverlaps(){
+  var k, i, j, o, hit, a, b, lo, hi;
+  for (k = 0; k < 40; k++){
+    hit = false;
+    for (i = 0; i < S.nodes.length; i++){
+      if (isPt(S.nodes[i])) continue;
+      for (j = i + 1; j < S.nodes.length; j++){
+        if (isPt(S.nodes[j])) continue;
+        o = lap(S.nodes[i], S.nodes[j]);
+        if (o.x <= 0 || o.y <= 0) continue;
+        a = box(S.nodes[i]); b = box(S.nodes[j]);
+        if (a.y < b.y || (a.y === b.y && i < j)){ hi = S.nodes[i]; lo = S.nodes[j]; }
+        else { hi = S.nodes[j]; lo = S.nodes[i]; }
+        lo.y = Math.round((box(hi).y + box(hi).h + ROWGAP) / SNAP) * SNAP + boxOffY(lo);
+        hit = true;
+      }
+    }
+    if (!hit) return;
+  }
 }
 /* 5. Slide whole rows up until only ROWGAP of blank sheet is left between them.
       A row moves as one piece, so a run that was just made straight stays
@@ -1099,6 +1142,7 @@ export function cleanUp(sure){
        furthest-flung member: squeezing can slide one input past another every bit
        as easily as straightening can, so the deal has to come after it */
     orderInputs();
+    clearOverlaps();
     pullEnds();
     if (!i) step("Squeezed — the dead space taken out, the inputs dealt back in order");
     mark = placeMark();

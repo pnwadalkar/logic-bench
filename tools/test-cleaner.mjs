@@ -304,6 +304,70 @@ check("duplicate switch names become A, A2", (() => {
   return run(`JSON.stringify([TYPES["${k}"].pn, TYPES["${k}"].po])`) === '[["A","A2"],["Q1"]]';
 })(), run(`JSON.stringify(TYPES[Object.keys(TYPES).filter(function(k){return k.indexOf("U:Dup")===0})[0]].pn)`));
 
+/* ---- the Cleaner's inputs: ordered like a chip's pins, and never on top of each other ---- */
+console.log("input order and spacing");
+run(`T.reset();
+  var names = ["B2", "Cin", "A1", "B0", "A3", "A0", "B1", "A2", "B3"], i, g, ls = [];
+  for (i = 0; i < names.length; i++) T.add("SWITCH", 20 + (i % 3) * 5, 20 + ((i * 5) % 9) * 14, names[i]);
+  T.add("VCC", 20, 400); T.add("HEXIN", 20, 460);
+  var gate = T.add("AND", 200, 40), q = T.add("LAMP", 320, 40, "Q");
+  T.wire(S.nodes[0], gate, 0); T.wire(S.nodes[5], gate, 1); T.wire(gate, q, 0);
+  reindex(); cleanUp(true);`);
+check("switches come out as chip pins are ordered: the bus drawn first first, each counting up, Cin last",
+  run(`S.nodes.filter(function(n){ return n.t === "SWITCH"; }).sort(function(a, b){ return box(a).y - box(b).y; }).map(function(n){ return n.l; }).join(" ")`) === "B0 B1 B2 B3 A0 A1 A2 A3 Cin",
+  run(`S.nodes.filter(function(n){ return n.t === "SWITCH"; }).sort(function(a, b){ return box(a).y - box(b).y; }).map(function(n){ return n.l; }).join(" ")`));
+check("a power rail and a hex input among them overlap nothing", run("T.geo()").filter((s) => s.indexOf("overlap") >= 0).length === 0, run("T.geo()").join("; "));
+{
+  const m = run("T.mark()"); run("cleanUp(true)");
+  check("and a second press leaves them where they are", m === run("T.mark()"));
+}
+
+/* ---- a chip from chips: no switches, the open pins of the parts inside become the pins ---- */
+console.log("a chip made of two 4-bit adders");
+run(`T.reset();
+  var u1 = T.add("ADD4", 60, 40), u2 = T.add("ADD4", 240, 120);
+  T.wire(u1, u2, 8, 4);
+  reindex();
+  T.adderIds = [u1.id, u2.id];`);
+const add8 = run("T.makeChip('ADD8', T.adderIds)");
+const names8 = JSON.parse(run(`JSON.stringify([TYPES["${add8}"].pn, TYPES["${add8}"].po])`));
+const wantIn = [...Array(8).keys()].map((i) => "A" + i).concat([...Array(8).keys()].map((i) => "B" + i), ["Cin"]);
+const wantOut = [...Array(8).keys()].map((i) => "S" + i).concat(["Cout"]);
+check("its inputs are A0..A7, B0..B7, Cin", JSON.stringify(names8[0]) === JSON.stringify(wantIn), JSON.stringify(names8[0]));
+check("its outputs are S0..S7, Cout (the first adder's Cout is inside, so not a pin)", JSON.stringify(names8[1]) === JSON.stringify(wantOut), JSON.stringify(names8[1]));
+run(`T.reset();
+  var c = T.add("${add8}", 200, 60), sw = [], lp = [], i;
+  for (i = 0; i < 17; i++){ sw.push(T.add("SWITCH", 20, 20 + i * 36, TYPES["${add8}"].pn[i])); T.wire(sw[i], c, i); }
+  for (i = 0; i < 9; i++){ lp.push(T.add("LAMP", 420, 20 + i * 36, TYPES["${add8}"].po[i])); T.wire(c, lp[i], 0, i); }
+  reindex();
+  T.add8 = function(a, b, cin){
+    for (var i = 0; i < 8; i++){ sw[i].s = (a >> i) & 1; sw[8 + i].s = (b >> i) & 1; }
+    sw[16].s = cin; solve();
+    var v = 0; for (var j = 0; j < 9; j++) v += lp[j].v << j; return v;
+  };`);
+{
+  let bad = 0, open = run("solve()");
+  for (const [a, b, c] of [[0, 0, 0], [1, 1, 0], [255, 1, 0], [255, 255, 1], [100, 155, 1], [37, 91, 0], [128, 128, 0], [15, 1, 0], [240, 16, 1]])
+    if (run(`T.add8(${a}, ${b}, ${c})`) !== a + b + c) bad++;
+  for (let k = 0; k < 40; k++) { const a = Math.floor(rnd() * 256), b = Math.floor(rnd() * 256), c = Math.floor(rnd() * 2); if (run(`T.add8(${a}, ${b}, ${c})`) !== a + b + c) bad++; }
+  check("the chip adds two bytes and a carry (49 sums)", bad === 0, bad + " wrong");
+  check("a chip whose pins come from open parts leaves no open input behind", open === 0, "open " + open);
+}
+{
+  const json = JSON.parse(JSON.stringify(run("snapshot()")));
+  run(`delete TYPES["${add8}"];`);
+  globalThis.__j8 = json;
+  run("(function(){ var g = graphOf(__j8); S.nodes = g.nodes; S.wires = g.wires; reindex(); })()");
+  check("the 8-bit adder chip survives a save and reload", run(`TYPES["${add8}"] && TYPES["${add8}"].pi.length === 17 && TYPES["${add8}"].po.length === 9`));
+}
+/* parts side by side, joined by nothing, still number on from each other */
+run(`T.reset();
+  var d1 = T.add("DEC24", 60, 40), d2 = T.add("DEC24", 60, 160); reindex(); T.decIds = [d1.id, d2.id];`);
+const decK = run("T.makeChip('DEC2x', T.decIds)");
+check("two chips side by side: buses carry on (A0 A1 A2 A3, EN, EN2) and outputs (Y0..Y7)",
+  run(`JSON.stringify([TYPES["${decK}"].pn, TYPES["${decK}"].po])`) === '[["A0","A1","A2","A3","EN","EN2"],["Y0","Y1","Y2","Y3","Y4","Y5","Y6","Y7"]]',
+  run(`JSON.stringify([TYPES["${decK}"].pn, TYPES["${decK}"].po])`));
+
 /* saved builds, if asked for:  JSONS=D:/circuits node tools/test-cleaner.mjs */
 if (process.env.JSONS) {
   for (const f of fs.readdirSync(process.env.JSONS).filter((x) => x.endsWith(".json"))) {
