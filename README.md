@@ -23,7 +23,7 @@ device. `?layout=auto` goes back to automatic.
 
 ## Parts
 
-The rail groups them in six families, a tab each:
+The rail groups them in seven families, a tab each:
 
 | Family | Parts |
 | --- | --- |
@@ -33,8 +33,27 @@ The rail groups them in six families, a tab each:
 | Arithmetic | Half adder, Full adder, 4-bit adder, 4-bit comparator, 4-bit ALU (ADD SUB AND OR XOR NOT INC SHL) |
 | Routing | MUX 2:1, MUX 4:1, DEMUX 1:4, Decoder 2:4, Decoder 3:8, Priority encoder 4:2 |
 | Memory | SR latch, D latch, D / JK / T flip-flops, 4-bit register, shift register, counter, RAM 16×4, ROM 16×4 |
+| Cooling | 12 V case fans in the three common sizes — 80, 120 and 140 mm — each as a 3-pin fan (+12V in, TACH out) or a 4-pin PWM fan (+12V and PWM in, TACH out) |
 
 Hover a part in the rail for what it does and which pin is which.
+
+**Fans.** A fan runs while its +12V pin is 1 (wire a Power part to it) and coasts to a stop when it goes
+to 0. A 4-pin fan's PWM sets the speed: high is full speed, low idles at 20%, and left open counts as
+high, as on a motherboard fan header — put a clock on it for the speeds between. TACH is the speed
+signal, two pulses a turn, so a counter or a lamp can read it. Top speeds: 80 mm 2000 RPM, 120 mm
+1500 RPM, 140 mm 1200 RPM. Blades and tach run in slow motion (1/40 of the RPM on the label).
+
+**Temperature (Test mode).** Test mode opens a temperature monitor. Every part that draws power gives
+off heat — an ALU about 2 W, RAM 1 W, a gate 0.1 W — and settles at 25 °C plus its watts × 40 °C/W,
+more while its pins are busy. A part glows amber, then red as it warms. A running fan blows over the
+parts within its reach (80 mm 200, 120 mm 300, 140 mm 360 sheet units, strongest close to it), so
+where you place it matters. The monitor shows the hottest part, a graph of the last minute, the average,
+and the fans running; 60 °C is warm, 85 °C hot, 105 °C fails. Time runs fast (a part takes about 5 s to
+get most of the way) and everything starts cold each time Test mode begins.
+
+**The bin.** The dustbin sits in the bottom-right corner of the screen. Drag a part, a boxed-in region
+or a loose wire end onto it and let go to delete it (Ctrl+Z puts it back); a part taken off the console
+and dropped in the bin is simply never placed. Clicking the bin deletes whatever is picked.
 
 **Signals have a strength.** An output drives strong (a gate, a switch, the power rails), weak
 (through a resistor) or not at all (an off transistor, a disabled tri-state). Where wires meet,
@@ -80,7 +99,8 @@ Arena are for classical builds.
 - Half adder, clocked counter and Bell pair examples on the Home page
 - Region select, copy / cut / paste / duplicate, undo
 - **Cleaner** squares the whole circuit up into tidy columns, step by step
-- **Test** mode locks the sheet so you can drive it with the switches
+- **Test** mode locks the sheet so you can drive it with the switches, and shows a temperature monitor
+- A dustbin in the corner: drag anything onto it to delete it
 - Zoom (buttons, wheel, pinch), Fit
 - Builds saved on the device, with a Home page to open, rename, copy and delete them
 - Back up all builds to one JSON file and restore them on another device
@@ -192,6 +212,7 @@ src/
     shapes.js         drawing gates, switches, buttons and lamps
     symbols.js        drawing components, chips and displays
     icons.js          the drawings on the console's tiles
+    cooling.js        fan speed and tach, the heat model behind the Test-mode temperature monitor
     sim.js            signal drive, every part's logic, clock edges, selection
     quantum.js        the quantum parts, the state-vector simulator, their drawing, the Bell pair
     render.js         painting the sheet, hit tests

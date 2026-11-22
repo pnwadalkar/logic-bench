@@ -6,6 +6,7 @@ import { useBench, useViewportHeight } from "./hooks.js";
 import Header from "./components/Header.jsx";
 import Rail from "./components/Rail.jsx";
 import Stage from "./components/Stage.jsx";
+import Bin from "./components/Bin.jsx";
 import Home from "./components/Home.jsx";
 import Arena from "./components/Arena.jsx";
 import Login from "./components/Login.jsx";
@@ -60,6 +61,7 @@ export default function App() {
           <Stage toast={!over} />
         </div>
       </div>
+      {!over && !S.login && <Bin />}
       {S.homeOpen && <Home />}
       {S.arenaOpen && <Arena />}
       {S.login && <Login />}

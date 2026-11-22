@@ -4,7 +4,7 @@ import { S } from "./state.js";
 import { DRAW, TYPES } from "./core.js";
 import { qMultiIcon } from "./quantum.js";
 import { drawGate, drawPart, roundRect } from "./shapes.js";
-import { chipIcon } from "./symbols.js";
+import { chipIcon, rotor } from "./symbols.js";
 
 /* A tile's canvas, cleared and scaled so an icon is drawn in a 50 × 34 box. */
 export function iconCtx(c){
@@ -96,6 +96,12 @@ export function railIcon(c, t){
     fake = {t:t, x:x + (d.k === "lamp" ? 6 : 2), y:(34 - d.h) / 2, v:0, s:0, l:"", iv:[]};
     drawPart(g, fake, s);
     d.w = save.w; d.h = save.h;
+  } else if (d.fan){
+    /* a fan: its frame and blades between the pins it has — one more on the 4-pin kind */
+    g.lineWidth = 1.2; g.lineCap = "round"; g.strokeStyle = S.C.wire;
+    for (var i = 0; i < d.ins; i++){ g.beginPath(); g.moveTo(5, 17 + (i - (d.ins - 1) / 2) * 7); g.lineTo(12, 17 + (i - (d.ins - 1) / 2) * 7); g.stroke(); }
+    g.beginPath(); g.moveTo(38, 17); g.lineTo(45, 17); g.stroke();
+    rotor(g, 25, 17, 13, 0.3, 0.5);
   } else if (d.k === "chip"){
     chipIcon(g, t);
   } else if (d.k === "qmulti"){

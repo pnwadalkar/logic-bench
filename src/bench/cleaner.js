@@ -2,6 +2,7 @@
 import { S, ask, flash, notify } from "./state.js";
 import { load, snapshot } from "./builds.js";
 import { Collab } from "./collab.js";
+import { resetHeat } from "./cooling.js";
 import { GRID, PTR, SNAP, STUB, box, byId, hasOut, inPort, isPt, nIn, newId, outPort, pinGroup, pinSplit } from "./core.js";
 import { addNode, commit, pushUndo } from "./edit.js";
 import { closeRename } from "./input.js";
@@ -1214,7 +1215,10 @@ export function setSelectMode(){
 /* Test mode: the circuit is frozen as built and can only be driven. Switches and
    buttons still work; nothing can be moved, wired, renamed or deleted. */
 export function setTest(on){
+  var was = S.testMode;
   S.testMode = !!on;
+  /* Test mode starts every part cold, and the temperature monitor with it */
+  if (S.testMode !== was) resetHeat(S.testMode && S.docKind !== "quantum");
   if (S.testMode){
     S.wiring = null; S.wend = null; S.drag = null; S.marq = null; S.regionMode = false; S.pasteMode = false;
     clearPick(); closeRename();

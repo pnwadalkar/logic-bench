@@ -1,6 +1,7 @@
 /* Drawing the components and the chips: transistors, the passives, power and
    ground, the clock, the displays, and every boxed chip with its named pins. */
 import { S } from "./state.js";
+import { fanRpm } from "./cooling.js";
 import { DRAW, TITLE, TYPES, inPort, lvl, nIn, nOut, outPort } from "./core.js";
 import { roundRect } from "./shapes.js";
 import { ALUOPS, bits } from "./sim.js";
@@ -102,6 +103,45 @@ export var INSIDE = {
   ROM:  wordGrid
 };
 INSIDE.SHR4 = INSIDE.CNT4 = INSIDE.REG4;
+
+/* A case fan seen from the front: the square frame with its four screw holes, and
+   seven curved blades about the hub, turned to angle a. sp (0 to 1) is how fast it
+   spins — a blur of colour fills the swept disc as it speeds up. */
+export function rotor(c, cx, cy, R, a, sp){
+  var i, k = 7, th, at = function(r, ang){ return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)]; }, p, q, e;
+  c.lineWidth = 1.2; c.lineJoin = "round";
+  roundRect(c, cx - R, cy - R, R * 2, R * 2, Math.max(3, R * 0.14));
+  c.fillStyle = S.C.body; c.fill(); c.strokeStyle = S.C.line; c.stroke();
+  c.fillStyle = S.C.grid;
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function(s){
+    c.beginPath(); c.arc(cx + s[0] * (R - 4.5), cy + s[1] * (R - 4.5), 1.5, 0, 7); c.fill();
+  });
+  c.beginPath(); c.arc(cx, cy, R - 3.5, 0, 7); c.strokeStyle = S.C.wire; c.lineWidth = 1; c.stroke();
+  if (sp > 0.05){
+    c.globalAlpha = Math.min(0.3, sp * 0.3); c.fillStyle = S.C.hot;
+    c.beginPath(); c.arc(cx, cy, R - 4, 0, 7); c.fill(); c.globalAlpha = 1;
+  }
+  c.lineWidth = 1; c.strokeStyle = S.C.line; c.fillStyle = sp > 0.02 ? S.C.hot : S.C.muted;
+  c.globalAlpha = sp > 0.02 ? 0.6 : 0.35;
+  for (i = 0; i < k; i++){
+    th = a + i * 2 * Math.PI / k;
+    p = at(R * 0.16, th); c.beginPath(); c.moveTo(p[0], p[1]);
+    q = at(R * 0.78, th + 0.55); e = at(R - 5, th + 1.05); c.quadraticCurveTo(q[0], q[1], e[0], e[1]);
+    q = at(R * 0.6, th + 0.32); e = at(R * 0.16, th + 0.42); c.quadraticCurveTo(q[0], q[1], e[0], e[1]);
+    c.closePath(); c.fill(); c.stroke();
+  }
+  c.globalAlpha = 1;
+  c.beginPath(); c.arc(cx, cy, Math.max(3, R * 0.2), 0, 7);
+  c.fillStyle = S.C.body; c.fill(); c.strokeStyle = S.C.line; c.lineWidth = 1.2; c.stroke();
+}
+function fanInside(c, n, x, y, w, h){
+  var d = TYPES[n.t], s = h - TITLE - 16, cy = y + TITLE + 3 + s / 2;
+  rotor(c, x + d.cx, cy, s / 2, n.fa || 0, n.fs || 0);
+  c.font = '500 8px "IBM Plex Mono", monospace'; c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillStyle = n.fs > 0.02 ? S.C.hot : S.C.muted;
+  c.fillText(fanRpm(n) + " rpm", x + d.cx, y + h - 7);
+}
+Object.keys(TYPES).forEach(function(t){ if (TYPES[t].fan) INSIDE[t] = fanInside; });
 
 /* Each kind of part past the seven gates, drawn at its corner n.x, n.y. */
 Object.assign(DRAW, {

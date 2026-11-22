@@ -12,6 +12,7 @@ export const S = {
   toast: null,          /* {msg, n, at}: the last short message, n counting them, at when it was said */
   rename: null,         /* {id, left, top, value} while a part is being renamed */
   steps: null,          /* {at, names} while the Cleaner shows its passes */
+  binHot: false,        /* something is being carried and the pointer is over the dustbin */
   open: 0,              /* inputs left open on the sheet, from the last settle */
   colorsRev: 0,         /* counts changes of theme, so drawn icons know to redraw */
   shared: { list: [], loaded: false, error: "" },   /* the shared projects you are in */

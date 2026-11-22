@@ -125,7 +125,34 @@ export var TYPES = {
     pi:["A0","A1","A2","A3","D0=0","D1=0","D2=0","D3=0","WE=0","CLK"], po:["Q0","Q1","Q2","Q3"],
     tip:"RAM: sixteen 4-bit words. Q always reads the word at address A; on a rising CLK edge while WE is 1, D is written there · double-click to see or change what it holds"},
   ROM:   {n:"ROM 16×4", k:"chip", ab:"ROM", mid:46, pi:["A0","A1","A2","A3"], po:["D0","D1","D2","D3"],
-    tip:"ROM: sixteen 4-bit words, read by address · double-click to program it"}
+    tip:"ROM: sixteen 4-bit words, read by address · double-click to program it"},
+
+  /* ---- cooling: the case fans you can buy, in the three common sizes ----
+     Every one is a 12 V DC fan. The 3-pin kind has +12V and a TACH signal (two pulses
+     a turn, the way a motherboard counts its speed); the 4-pin kind adds PWM, the
+     speed control, which a real header leaves pulled high so an open PWM means full
+     speed. Ground is taken as read. fan holds the datasheet numbers: top speed (rpm),
+     airflow (cfm), how far the air reaches over the sheet (reach), and whether it has
+     a PWM pin. rows and mid make the part as tall and wide as the fan is big. See
+     cooling.js for how they spin, and what they do to the temperature in Test mode. */
+  FAN80:  {n:"Fan 80",      k:"chip", ab:"FAN 80",      rows:3, mid:44, fan:{mm:80,  rpm:2000, cfm:31, reach:200, pwm:false},
+    pi:["+12V"], po:["TACH"],
+    tip:"80 mm case fan, 12 V, 3-pin: a 1 on +12V spins it up to 2000 RPM (about 31 CFM), a 0 lets it coast to a stop. TACH gives two pulses a turn — count them to read its speed. In Test mode it cools the parts around it. Drawn in slow motion."},
+  FAN80P: {n:"Fan 80 PWM",  k:"chip", ab:"FAN 80 PWM",  rows:3, mid:44, fan:{mm:80,  rpm:2000, cfm:31, reach:200, pwm:true},
+    pi:["+12V","PWM=1"], po:["TACH"],
+    tip:"80 mm case fan, 12 V, 4-pin PWM: +12V powers it, PWM sets the speed — high is full (2000 RPM), low idles at 20%, left open is full, as on a real fan header. A clock on PWM gives the speeds between. TACH is two pulses a turn."},
+  FAN120: {n:"Fan 120",     k:"chip", ab:"FAN 120",     rows:4, mid:60, fan:{mm:120, rpm:1500, cfm:60, reach:300, pwm:false},
+    pi:["+12V"], po:["TACH"],
+    tip:"120 mm case fan, 12 V, 3-pin: a 1 on +12V spins it up to 1500 RPM (about 60 CFM), a 0 lets it coast to a stop. TACH gives two pulses a turn. In Test mode it cools the parts around it, further than an 80 mm one. Drawn in slow motion."},
+  FAN120P:{n:"Fan 120 PWM", k:"chip", ab:"FAN 120 PWM", rows:4, mid:60, fan:{mm:120, rpm:1500, cfm:60, reach:300, pwm:true},
+    pi:["+12V","PWM=1"], po:["TACH"],
+    tip:"120 mm case fan, 12 V, 4-pin PWM: +12V powers it, PWM sets the speed — high is full (1500 RPM), low idles at 20%, left open is full. TACH is two pulses a turn."},
+  FAN140: {n:"Fan 140",     k:"chip", ab:"FAN 140",     rows:5, mid:76, fan:{mm:140, rpm:1200, cfm:80, reach:360, pwm:false},
+    pi:["+12V"], po:["TACH"],
+    tip:"140 mm case fan, 12 V, 3-pin: a 1 on +12V spins it up to 1200 RPM (about 80 CFM) — slow, big and quiet — a 0 lets it coast to a stop. TACH gives two pulses a turn. In Test mode it cools the most parts of any fan."},
+  FAN140P:{n:"Fan 140 PWM", k:"chip", ab:"FAN 140 PWM", rows:5, mid:76, fan:{mm:140, rpm:1200, cfm:80, reach:360, pwm:true},
+    pi:["+12V","PWM=1"], po:["TACH"],
+    tip:"140 mm case fan, 12 V, 4-pin PWM: +12V powers it, PWM sets the speed — high is full (1200 RPM), low idles at 20%, left open is full. TACH is two pulses a turn."}
 };
 /* The families the parts console offers, a tab each. Electronics holds no
    fixed parts: u marks it as the shelf of areas you name and save yourself
@@ -135,7 +162,8 @@ export var CATS_C = [
   {n:"Signals",     t:["SWITCH","BUTTON","CLOCK","HEXIN","LAMP","HEXD","SEG7"]},
   {n:"Gates",       t:["AND","OR","NOT","NAND","NOR","XOR","XNOR","BUF","TRI"]},
   {n:"Arithmetic",  t:["HADD","FADD","ADD4","CMP4","ALU"]},
-  {n:"Electronics", t:[], u:1}
+  {n:"Electronics", t:[], u:1},
+  {n:"Cooling",     t:["FAN80","FAN80P","FAN120","FAN120P","FAN140","FAN140P"]}
 ];
 /* the families a quantum build's console offers (the parts themselves are in quantum.js) */
 export var CATS_Q = [
@@ -182,7 +210,7 @@ export function defineChip(d){
   d.ins = d.pi.length;
   if (d.outs === undefined) d.outs = d.po.length;
   (d.po || []).forEach(function(s){ lo = Math.max(lo, s.replace("~", "").length); });
-  rows = Math.max(d.ins, d.outs, 1);
+  rows = Math.max(d.ins, d.outs, d.rows | 0, 1);       /* rows: a part that is taller than its pins need, a fan */
   d.h = TITLE + rows * PITCH + 4;
   if (!d.w) d.w = Math.max(44, Math.ceil(d.ab.length * PINCH + 16),
                            Math.ceil(((li + lo) * PINCH + 16 + (d.mid || 10)) / 4) * 4);
@@ -418,7 +446,7 @@ export function isPt(n){ return TYPES[n.t].k === "pt"; }
 export function pinY(n, i, count, fixed){
   var d = TYPES[n.t], rows;
   if (d.k === "chip"){
-    rows = Math.max(d.ins, nOut(n), 1);
+    rows = Math.max(d.ins, nOut(n), d.rows | 0, 1);
     return n.y + TITLE + (rows - count) * PITCH / 2 + PITCH * (i + 0.5);
   }
   if (fixed && fixed[i] !== undefined) return n.y + fixed[i];

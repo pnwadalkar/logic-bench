@@ -120,6 +120,10 @@ export var RULE = {
   RAM:   function(n, a){ return outBits(words(n)[bits(a, 0, 4)], 4); },
   ROM:   function(n, a){ return outBits(words(n)[bits(a, 0, 4)], 4); }
 };
+/* a fan's one output is its TACH, which cooling.js ticks (n.tp) as the blades turn */
+Object.keys(TYPES).forEach(function(t){
+  if (TYPES[t].fan) RULE[t] = function(n){ return [drv(n.tp)]; };
+});
 /* What an edge-triggered part holds after a rising edge on its clock pin, from
    the levels its inputs had settled at just before it. */
 export var EDGE = {

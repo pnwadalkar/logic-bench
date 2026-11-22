@@ -3,7 +3,7 @@ import { S, ask, flash, notify } from "./state.js";
 import { saveBuild, saveCur } from "./builds.js";
 import { bounds, cleanUp, playEnd, setCursor, setRegionMode, setSelectMode, setTest, setWireMode } from "./cleaner.js";
 import { SNAP, TYPES, ZMAX, ZMIN, byId, isPt, pickN, pickW } from "./core.js";
-import { commit, connect, copyPick, dropEnd, endAt, pasteClip, pushUndo, removeSel, selectAll, setPasteMode, undo } from "./edit.js";
+import { commit, connect, copyPick, dropEnd, dropInBin, endAt, pasteClip, pushUndo, removeSel, selectAll, setPasteMode, undo } from "./edit.js";
 import { enterBench } from "./home.js";
 import { applyMarq, draw, near, nodeAt, pointAt, portAt, portTarget, toWorld, wireAt } from "./render.js";
 import { clearPick, evaluate, pickOne, pickSpread, picked, words } from "./sim.js";
@@ -15,7 +15,7 @@ import { tapPart } from "./timing.js";
    loose wire ends included, so a block of circuit travels whole. */
 export function dragSet(p, primary, group){
   var off = [], seen = new Set(), i, w;
-  var add = function(o){ off.push({o:o, dx:p.x - o.x, dy:p.y - o.y}); };
+  var add = function(o){ off.push({o:o, dx:p.x - o.x, dy:p.y - o.y, x0:o.x, y0:o.y}); };
   add(primary); seen.add(primary);
   if (!group) return off;
   for (i = 0; i < S.nodes.length; i++)
@@ -103,7 +103,7 @@ export function onTouchDown(e){
   if (S.drag && S.drag.off) S.drag.off.forEach(function(o){
     o.o.x = Math.round(o.o.x / SNAP) * SNAP; o.o.y = Math.round(o.o.y / SNAP) * SNAP;
   });
-  S.drag = null; S.wiring = null; S.wend = null; S.marq = null; S.panning = null; closeRename();
+  S.drag = null; S.wiring = null; S.wend = null; S.marq = null; S.panning = null; S.binHot = false; closeRename();
   var s = pinchSpan();
   pinch = {d:s.d, z:S.zoom, wx:(s.x - S.pan.x) / S.zoom, wy:(s.y - S.pan.y) / S.zoom};
   if (moved) commit(); else draw();
@@ -218,12 +218,27 @@ export function onPointerDown(e){
   }
   notify(); evaluate(); draw();
 }
+/* ---------- the dustbin ---------- */
+/* Is the pointer over the dustbin in the corner of the screen? A little slack round
+   it, so a finger does not have to find the exact edge. */
+export function overBin(e){
+  var el = document.getElementById("bin"), r, m = 10;
+  if (!el || S.testMode) return false;
+  r = el.getBoundingClientRect();
+  return e.clientX >= r.left - m && e.clientX <= r.right + m && e.clientY >= r.top - m && e.clientY <= r.bottom + m;
+}
+/* the bin opens its lid while something is held over it */
+function binWatch(e){
+  var hot = overBin(e);
+  if (hot !== !!S.binHot){ S.binHot = hot; notify(); }
+}
 export function onPointerMove(e){
   if (S.pend){ S.cursor = toWorld(e); draw(); }
   if (!S.drag && !S.wiring && !S.panning && !S.wend && !S.marq) return;
   var p = toWorld(e), n, i, o;
   if (S.wend){
     if (S.wend.e === "a") S.wend.w.fa = {x:p.x, y:p.y}; else S.wend.w.fb = {x:p.x, y:p.y};
+    binWatch(e);
     draw(); return;
   }
   if (S.wiring){ S.wiring.x = p.x; S.wiring.y = p.y; draw(); return; }
@@ -237,7 +252,8 @@ export function onPointerMove(e){
     for (i = 0; i < S.drag.off.length; i++){
       o = S.drag.off[i]; o.o.x = p.x - o.dx; o.o.y = p.y - o.dy;
     }
-    S.drag.moved = true;
+    if (!S.drag.moved){ S.drag.moved = true; notify(); }       /* the bin wakes up: something is being carried */
+    binWatch(e);
     draw(); return;
   }
   S.pan.x = S.panning.px + (e.clientX - S.panning.x);
@@ -254,7 +270,8 @@ export function onTouchMoveGuard(e){
 export function onHover(e){ S.hover = toWorld(e); if (S.pasteMode) draw(); }
 export function onLeave(){ S.hover = null; if (S.pasteMode) draw(); }
 export function onPointerUp(e){
-  var n, p, ph, r;
+  var n, p, ph, r, inBin = overBin(e);
+  if (S.binHot){ S.binHot = false; notify(); }
   if (S.wiring){
     p = toWorld(e);
     ph = portTarget(p, S.wiring.from.kind === "out" ? "in" : "out");
@@ -264,13 +281,18 @@ export function onPointerUp(e){
     }
     else { S.wiring = null; noWire(); draw(); }
   }
-  if (S.wend){ dropEnd(S.wend, toWorld(e)); S.wend = null; commit(); }
+  if (S.wend){
+    if (inBin){ S.wend = null; removeSel(); }            /* a loose wire end let go in the bin takes its wire with it */
+    else { dropEnd(S.wend, toWorld(e)); S.wend = null; commit(); }
+  }
   if (S.marq){
     applyMarq(S.marq); S.marq = null;
     notify(); evaluate(); draw();
     if (picked() > 1) flash(pickN.size + " part" + (pickN.size === 1 ? "" : "s") +
       " picked · Copy on the bar above them, then Paste drops it wherever you click");
   }
+  /* let go over the dustbin: whatever was being carried is deleted */
+  if (S.drag && !S.drag.lock && S.drag.moved && inBin){ dropInBin(); S.drag = null; }
   if (S.drag){
     var lock = !!S.drag.lock, i, o;
     n = byId.get(S.drag.id);

@@ -110,6 +110,25 @@ export function removeSel(){
   clearPick(); commit();
   if (gone > 1) flash("Deleted " + gone + " items · Ctrl+Z puts them back");
 }
+/* Whatever is being dragged — one part, a boxed-in region, a loose wire end, or a new
+   part just taken off the console — is let go over the dustbin and is deleted. */
+export function dropInBin(){
+  var d = S.drag, i, o, gone = picked();
+  if (d && d.spawn){
+    /* off the console and straight into the bin: it was never really put on the sheet, so there is nothing to undo */
+    S.nodes = S.nodes.filter(function(n){ return !pickN.has(n.id); });
+    reindex(); clearPick(); commit();
+    flash("Dropped in the bin");
+    return;
+  }
+  /* parts go back to where they were picked up first, so Ctrl+Z puts them there */
+  if (d && d.off) for (i = 0; i < d.off.length; i++){
+    o = d.off[i];
+    if (o.x0 !== undefined){ o.o.x = o.x0; o.o.y = o.y0; }
+  }
+  removeSel();
+  if (gone === 1) flash("Binned · Ctrl+Z puts it back");
+}
 export function commit(){ S.docDirty = true; evaluate(); draw(); saveCur(); }
 
 /* ---------- undo ---------- */

@@ -2,6 +2,7 @@
 import { S } from "./state.js";
 import { hits } from "./cleaner.js";
 import { Collab } from "./collab.js";
+import { heatColor } from "./cooling.js";
 import { GRID, PORT, PTR, SNAP, STUB, box, byId, dots, floats, hasOut, inPort, isPt, lvl, nIn, nOut, outPort, pickN, pickW } from "./core.js";
 import { qWire } from "./quantum.js";
 import { drawPart, roundRect } from "./shapes.js";
@@ -21,7 +22,7 @@ export function wirePath(c, p1, p2){
 }
 export function render(){
   if (!S.ctx) return;
-  var W = S.cv.clientWidth, H = S.cv.clientHeight, i, j, n, w, a, b, pt, bx, at, gh, on;
+  var W = S.cv.clientWidth, H = S.cv.clientHeight, i, j, n, w, a, b, pt, bx, at, gh, on, gl;
   S.ctx.setTransform(S.dpr, 0, 0, S.dpr, 0, 0);
   S.ctx.clearRect(0, 0, W, H);
   S.ctx.translate(Math.round(S.pan.x), Math.round(S.pan.y));
@@ -67,6 +68,12 @@ export function render(){
       S.ctx.strokeStyle = S.C.sel; S.ctx.lineWidth = 1; S.ctx.setLineDash([3, 3]);
       roundRect(S.ctx, bx.x - 3, bx.y - 3, bx.w + 6, bx.h + 6, 5); S.ctx.stroke();
       S.ctx.setLineDash([]);
+    }
+    /* Test mode: a part that is warming up glows amber, then red */
+    if (S.testMode && n.tc !== undefined && (gl = heatColor(n.tc))){
+      bx = box(n);
+      S.ctx.fillStyle = gl;
+      roundRect(S.ctx, bx.x - 5, bx.y - 5, bx.w + 10, bx.h + 10, 8); S.ctx.fill();
     }
     drawPart(S.ctx, n, STUB);
   }

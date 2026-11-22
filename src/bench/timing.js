@@ -1,5 +1,6 @@
 /* Time on the bench: clocks tick, capacitors charge and drain, inductors catch up. */
-import { S, flash } from "./state.js";
+import { S, flash, notify } from "./state.js";
+import { fanStep, heatStep } from "./cooling.js";
 import { TYPES } from "./core.js";
 import { draw } from "./render.js";
 import { evaluate, hi } from "./sim.js";
@@ -18,10 +19,18 @@ export function tick(){
   if (S.play || document.hidden || S.homeOpen || S.arenaOpen || S.login) return;
   tickNow();
 }
+var beat = 0;
 export function tickNow(){
-  var i, n, d, was, to, r, half, moved = false;
+  var i, n, d, was, to, r, half, f, moved = false, paint = false;
   for (i = 0; i < S.nodes.length; i++){
     n = S.nodes[i];
+    /* a fan: blades and speed only need painting; its TACH changing needs a settle */
+    if (TYPES[n.t].fan){
+      f = fanStep(n, TICK);
+      if (f.logic) moved = true;
+      if (f.spin) paint = true;
+      continue;
+    }
     if (!TYPES[n.t].tm) continue;
     if (n.t === "CLOCK"){
       r = rate(n);
@@ -42,7 +51,13 @@ export function tickNow(){
     if (Math.abs(n.m - to) < 0.002) n.m = to;
     if (Math.abs(n.m - was) > 1e-4) moved = true;
   }
+  /* Test mode keeps the temperatures, and the monitor reads them a few times a second */
+  if (S.testMode && S.docKind !== "quantum"){
+    if (heatStep(TICK)) paint = true;
+    if (++beat % 4 === 0) notify();
+  }
   if (moved){ evaluate(); draw(); }
+  else if (paint) draw();
 }
 /* started once, when the bench boots */
 export function startClock(){ return setInterval(tick, TICK); }

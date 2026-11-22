@@ -8,6 +8,7 @@ import "./styles/base.css";
 import "./styles/desktop.css";
 import "./styles/tablet.css";
 import "./styles/quantum.css";
+import "./styles/cooling.css";
 
 createRoot(document.getElementById("root")).render(<App />);
 

@@ -8,6 +8,7 @@ import { pickAction, pickBarSpot } from "../bench/edit.js";
 import { pickN, pickW } from "../bench/core.js";
 import { useBench } from "../hooks.js";
 import QuantumPanel from "./QuantumPanel.jsx";
+import Thermal from "./Thermal.jsx";
 import Toast from "./Toast.jsx";
 
 /* The little box a part is renamed in, put over the part that was double-clicked. */
@@ -128,6 +129,7 @@ export default function Stage({ toast }) {
       <Steps />
       {toast && <Toast />}
       <QuantumPanel />
+      <Thermal />
       <Zoom />
       <PickBar />
     </div>
