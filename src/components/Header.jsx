@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { S, flash } from "../bench/state.js";
+import { S, flash, notify } from "../bench/state.js";
 import { Auth } from "../bench/auth.js";
 import { Collab } from "../bench/collab.js";
 import { tipText } from "../bench/core.js";
@@ -102,6 +102,7 @@ export default function Header() {
         <span id="count" className={S.open > 0 ? "warn" : ""}>{countText()}</span>
         <FullButton />
         <button id="btnArena" type="button" title="Send a build in against a challenge and see where it ranks" onClick={arenaShow}>Arena</button>
+        <button id="btnLearn" type="button" className={S.tutorialOpen ? "key" : ""} title="Learn circuits step by step" onClick={() => { S.tutorialOpen = !S.tutorialOpen; notify(); }}>Learn</button>
         <button id="btnHome" type="button" title="All your builds, as cards to pick from" onClick={homeShow}>Home</button>
         <button id="btnSave" type="button" title="Name this build and save it (Ctrl+S)" onClick={saveBuild}>Save</button>
         <button id="btnNew" type="button" title="Start a fresh sheet, classical or quantum — the one you are on is kept"

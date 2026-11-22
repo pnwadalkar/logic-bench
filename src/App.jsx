@@ -13,6 +13,7 @@ import Login from "./components/Login.jsx";
 import Dialog from "./components/Dialog.jsx";
 import KindChooser from "./components/KindChooser.jsx";
 import Toast from "./components/Toast.jsx";
+import Tutorials from "./components/Tutorials.jsx";
 
 export default function App() {
   useBench();
@@ -64,6 +65,7 @@ export default function App() {
       {!over && !S.login && <Bin />}
       {S.homeOpen && <Home />}
       {S.arenaOpen && <Arena />}
+      {S.tutorialOpen && <Tutorials />}
       {S.login && <Login />}
       {S.dialog && <Dialog key={S.dialog.n} ask={S.dialog} />}
       {S.chooser && <KindChooser />}

@@ -97,6 +97,7 @@ Arena are for classical builds.
 
 - Drag parts from the console; click a port, then click another port to join them with a wire (or drag from one to the other)
 - Half adder, clocked counter and Bell pair examples on the Home page
+- A guided learning path from logic gates and adders through memory, CPUs, GPUs, transistor circuits and quantum builds
 - Region select, copy / cut / paste / duplicate, undo
 - **Cleaner** squares the whole circuit up into tidy columns, step by step
 - **Test** mode locks the sheet so you can drive it with the switches, and shows a temperature monitor

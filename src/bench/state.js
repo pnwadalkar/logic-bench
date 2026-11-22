@@ -6,6 +6,8 @@ export const S = {
   /* which page is up, and the small things over the sheet */
   homeOpen: false,      /* the home page, over the bench */
   arenaOpen: false,     /* the Arena, over both */
+  tutorialOpen: false,  /* the learning path and current lesson */
+  tutorialLesson: "half-adder",
   login: null,          /* {done} while the sign-in screen is up */
   dialog: null,         /* the question being asked: see ask() */
   chooser: null,        /* {done} while "classical or quantum?" is up */

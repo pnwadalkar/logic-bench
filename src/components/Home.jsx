@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { S, flash } from "../bench/state.js";
+import { S, flash, notify } from "../bench/state.js";
 import { Auth } from "../bench/auth.js";
 import { Collab } from "../bench/collab.js";
 import { askDelete, askNew, askRename, copyBuild, example, example2, libRead, snapshot, when } from "../bench/builds.js";
@@ -140,6 +140,7 @@ export default function Home() {
         <div className="homeAct">
           <button id="hNew" className="key" type="button" title="Start a new build — classical or quantum" onClick={() => askNew(started)}>New build</button>
           <button id="hArena" type="button" title="Challenges, rankings and the checker" onClick={arenaShow}>Arena</button>
+          <button id="hLearn" type="button" className="key" title="A guided path from logic gates to CPUs and GPUs" onClick={() => { S.tutorialOpen = true; S.tutorialLesson = "half-adder"; notify(); }}>Learning path</button>
           <button id="hEg" type="button" onClick={() => { example(); enterBench(); }}>Half adder example</button>
           <button id="hEg2" type="button" title="A clock driving a counter, read out on a hex display" onClick={() => { example2(); enterBench(); }}>Counter example</button>
           <button id="hEgQ" type="button" title="A quantum build: a Hadamard and a CNOT entangle two qubits, so the meters only ever agree" onClick={() => { exampleQ(); enterBench(); }}>Bell pair example</button>
