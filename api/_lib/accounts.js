@@ -135,6 +135,14 @@ async function userForToken(token) {
   return row.user;
 }
 
+/* Who has this username? Only what a project already shows to its members. */
+async function find(name) {
+  name = String(name || "").trim();
+  if (!NAME.test(name)) return null;
+  const row = await guard(function () { return store.readJson(userKey(idOf(name))); });
+  return row ? publicUser(row) : null;
+}
+
 async function logout(token) {
   recent.delete(token);
   if (/^[a-f0-9]{64}$/.test(token || "")) await store.remove(sessionKey(token));
@@ -191,4 +199,4 @@ async function writeState(user, body) {
   return { rev: next.rev };
 }
 
-module.exports = { register, login, logout, userForToken, readState, writeState };
+module.exports = { register, login, logout, find, userForToken, readState, writeState };

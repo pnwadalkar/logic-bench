@@ -18,6 +18,8 @@ export const S = {
   open: 0,              /* inputs left open on the sheet, from the last settle */
   colorsRev: 0,         /* counts changes of theme, so drawn icons know to redraw */
   shared: { list: [], loaded: false, error: "" },   /* the shared projects you are in */
+  invites: [],          /* invitations waiting for you: {pid, project, kind, from, color, at} */
+  invitePicker: null,   /* {project} while "who do you want to invite?" is up */
   onFrame: null         /* called after each paint of the sheet (the bar over a picked area) */
 };
 

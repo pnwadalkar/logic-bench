@@ -161,16 +161,13 @@ export function backToMine(){
   }
   evaluate(); draw();
 }
+/* Who do you want to invite? The picker is a component (InviteDialog); they
+   get a popup on their own page, and no code changes hands. */
 export function inviteAsk(p){
   if (!p) return;
-  var link = location.origin + location.pathname + "?join=" + p.code;
-  ask({title:"Invite people", ok:"Copy link", value:link,
-    msg:"Send this link — or the code " + p.code + ", to type into Join on their Home page. They sign in with their own Logic Bench account, and then they can see and change everything on this sheet.",
-    done:function(){
-      var ok = function(){ flash("Invite link copied · code " + p.code); };
-      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(ok, function(){ flash("Code " + p.code + " · copy the link from the box"); });
-      else flash("Code " + p.code);
-    }});
+  if (!S.shared.loaded) loadShared();
+  S.invitePicker = {project:p};
+  notify();
 }
 export function openShared(id){
   var p = Collab.project();
@@ -227,7 +224,7 @@ export function askDeleteShared(p){
 export function askQuitShared(p){
   var live = !!Collab.project() && Collab.project().id === p.id;
   ask({title:"Leave shared project", ok:"Leave", danger:true,
-    msg:"Leave “" + p.name + "”? It stays for the others, and you can join again with its code.",
+    msg:"Leave “" + p.name + "”? It stays for the others, and you can join again if someone invites you.",
     done:function(){
       Collab.leave(p.id).then(function(){ if (live) backToMine(); flash("Left “" + p.name + "”"); loadShared(); },
         function(e){ flash(e.message); });

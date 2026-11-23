@@ -332,6 +332,13 @@ export var Collab = (function(){
     join:function(code){
       return api({action:"join", code:code}).then(function(d){ return me.open(d.project.id); });
     },
+    /* Invitations: ask someone by username; see, take or turn down the ones sent to you. */
+    invite:function(id, to){ return api({action:"invite", id:id, to:to}).then(function(d){ return d.to; }); },
+    invites:function(){ return api({action:"invites"}).then(function(d){ return d.invites || []; }); },
+    accept:function(id){
+      return api({action:"accept", id:id}).then(function(d){ return me.open(d.project.id); });
+    },
+    decline:function(id){ return api({action:"decline", id:id}); },
     open:function(id){
       return api({action:"open", id:id}).then(function(d){
         begin(d.project, d.rev, d.n, d.w, false);

@@ -6,7 +6,7 @@ import { askDelete, askNew, askRename, copyBuild, example, example2, libRead, sn
 import { exampleQ } from "../bench/quantum.js";
 import { arenaShow } from "../bench/arena.js";
 import {
-  askDeleteShared, askQuitShared, backupAll, enterBench, inviteAsk, joinShared, loadShared, newShared, openBuild, openShared,
+  askDeleteShared, askQuitShared, backupAll, enterBench, inviteAsk, loadShared, newShared, openBuild, openShared,
   readFile, restoreText, shareSheet, thumb
 } from "../bench/home.js";
 import { useBench } from "../hooks.js";
@@ -55,13 +55,13 @@ function SharedCard({ p }) {
         <Avatars max={8} people={p.members.map((m) => ({ name: m.name, color: m.color, note: m.id === p.owner ? " · owner" : "" }))} />
         <b>{p.name}{p.kind === "quantum" && <span className="kindTag">Quantum</span>}</b>
         <small>
-          {p.parts} part{p.parts === 1 ? "" : "s"} · {p.members.length} {p.members.length === 1 ? "person" : "people"} · code {p.code}
+          {p.parts} part{p.parts === 1 ? "" : "s"} · {p.members.length} {p.members.length === 1 ? "person" : "people"}
           {live && <i> · open</i>}
         </small>
       </button>
       <div className="acts">
         <button type="button" className="key" title="Open" onClick={() => openShared(p.id)}>Open</button>
-        <button type="button" title="Get the invite link and code" onClick={() => inviteAsk(p)}>Invite</button>
+        <button type="button" title="Invite someone by username" onClick={() => inviteAsk(p)}>Invite</button>
         {owner
           ? <button type="button" className="danger" title="Delete this project for everyone" onClick={() => askDeleteShared(p)}>Delete</button>
           : <button type="button" className="danger" title="Take this project off your list" onClick={() => askQuitShared(p)}>Leave</button>}
@@ -74,12 +74,6 @@ function SharedCard({ p }) {
    copy has no server to share through. */
 function Shared() {
   const cloud = Auth.cloud(), sh = S.shared;
-  const [code, setCode] = useState("");
-  const join = (e) => {
-    e.preventDefault();
-    if (!code.trim()) return;
-    joinShared(code.trim()).then((ok) => { if (ok) setCode(""); });
-  };
   return (
     <div id="shBox">
       <p className="sect">Shared projects · build one circuit together, live</p>
@@ -88,11 +82,6 @@ function Shared() {
           <button id="shNew" type="button" title="Start an empty sheet that others can join and build on with you" onClick={newShared}>New shared project</button>
           <button id="shFrom" type="button" title="Turn the sheet you have open into a shared project"
             disabled={!S.nodes.length || Collab.active()} onClick={shareSheet}>Share the sheet I'm on</button>
-          <form id="shJoin" className="join" autoComplete="off" onSubmit={join}>
-            <input id="shCode" maxLength={8} spellCheck="false" autoCapitalize="characters" placeholder="Invite code"
-              aria-label="Invite code" value={code} onChange={(e) => setCode(e.target.value)} />
-            <button type="submit">Join</button>
-          </form>
         </div>
       )}
       <div id="shared" data-empty={!cloud || sh.list.length ? "" : sh.loaded ? "none" : "loading"}>

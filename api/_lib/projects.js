@@ -11,6 +11,7 @@
 const crypto = require("crypto");
 const { kv, flatToObj } = require("./kv");
 const { HttpError, StoreError } = require("./errors");
+const accounts = require("./accounts");
 
 const CODE_ABC = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ID = /^[nw][\w.-]{1,40}$/;
@@ -23,6 +24,10 @@ const K = (pid, part) => "lb:p:{" + pid + "}:" + part;
 const keysOf = (pid) => [K(pid, "mem"), K(pid, "n"), K(pid, "w"), K(pid, "rev"), K(pid, "log"), K(pid, "here")];
 const mine = (uid) => "lb:u:" + encodeURIComponent(uid) + ":proj";
 const codeKey = (code) => "lb:code:" + code;
+const invKey = (uid) => "lb:u:" + encodeURIComponent(uid) + ":inv";
+const INVITE_LIFE = 7 * 24 * 60 * 60 * 1000;   /* an invitation nobody answers goes away */
+const MAX_INVITES = 30;                         /* waiting for one person */
+const MAX_MEMBERS = 20;
 
 async function guard(fn) {
   try { return await fn(); } catch (err) {
@@ -152,6 +157,73 @@ async function join(user, code) {
     }
     await kv().sadd(mine(user.id), pid);
     return summary(pid, m);
+  });
+}
+
+/* ---------- invitations ----------
+   Someone in a project names another account; the invitation waits in that
+   account's inbox, and their page shows it as a popup. Accepting is what adds them. */
+async function invite(user, pid, toName) {
+  return guard(async function () {
+    pid = cleanPid(pid);
+    await needMember(user, pid);
+    const m = await meta(pid);
+    if (!m) throw new HttpError(404, "That project is gone.");
+    const typed = String(toName || "").trim();
+    if (!typed) throw new HttpError(400, "Type the username of the person to invite.");
+    const target = await accounts.find(typed);
+    if (!target) throw new HttpError(404, "Nobody has the username “" + typed.slice(0, 20) + "”. Check how it is spelled.");
+    if (target.id === user.id) throw new HttpError(400, "That is you.");
+    if (await kv().hexists(K(pid, "mem"), target.id)) throw new HttpError(400, target.name + " is already in this project.");
+    if ((await kv().hlen(K(pid, "mem"))) >= MAX_MEMBERS) throw new HttpError(400, "That project is full (" + MAX_MEMBERS + " people).");
+    const waiting = await kv().hgetall(invKey(target.id));
+    if (!waiting[pid] && Object.keys(waiting).length >= MAX_INVITES) throw new HttpError(400, target.name + " has too many invitations waiting.");
+    await kv().hset(invKey(target.id), { [pid]: JSON.stringify({
+      pid: pid, project: m.name, kind: m.kind === "quantum" ? "quantum" : "classical",
+      from: user.id, fromName: user.name, fromColor: user.color, at: Date.now()
+    }) });
+    return { to: { id: target.id, name: target.name, color: target.color } };
+  });
+}
+
+/* What is waiting for this person. Invitations to projects that are gone, or that
+   they are in already, or that went unanswered for a week, are cleared as they are found. */
+async function invites(user) {
+  return guard(async function () {
+    const rows = await kv().hgetall(invKey(user.id));
+    const out = [];
+    for (const pid of Object.keys(rows)) {
+      let o = null;
+      try { o = JSON.parse(rows[pid]); } catch (err) {}
+      const dead = !o || !(Date.now() - o.at < INVITE_LIFE) || !(await meta(pid)) || await kv().hexists(K(pid, "mem"), user.id);
+      if (dead) { await kv().hdel(invKey(user.id), pid); continue; }
+      out.push({ pid: pid, project: o.project, kind: o.kind, from: o.fromName, color: o.fromColor, at: o.at });
+    }
+    return out.sort(function (a, b) { return a.at - b.at; });
+  });
+}
+
+async function accept(user, pid) {
+  return guard(async function () {
+    pid = cleanPid(pid);
+    const rows = await kv().hgetall(invKey(user.id));
+    if (!rows[pid]) throw new HttpError(404, "That invitation is no longer there.");
+    const m = await meta(pid);
+    if (!m) { await kv().hdel(invKey(user.id), pid); throw new HttpError(404, "That project is gone."); }
+    if (!await kv().hexists(K(pid, "mem"), user.id)) {
+      if ((await kv().hlen(K(pid, "mem"))) >= MAX_MEMBERS) throw new HttpError(400, "That project is full (" + MAX_MEMBERS + " people).");
+      await kv().hset(K(pid, "mem"), { [user.id]: memberRow(user) });
+    }
+    await kv().sadd(mine(user.id), pid);
+    await kv().hdel(invKey(user.id), pid);
+    return summary(pid, m);
+  });
+}
+
+async function decline(user, pid) {
+  return guard(async function () {
+    await kv().hdel(invKey(user.id), cleanPid(pid));
+    return {};
   });
 }
 
@@ -330,4 +402,4 @@ async function remove(user, pid) {
   });
 }
 
-module.exports = { list, create, join, open, sync, voice, rename, leave, remove };
+module.exports = { list, create, join, invite, invites, accept, decline, open, sync, voice, rename, leave, remove };

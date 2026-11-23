@@ -8,6 +8,7 @@ import { example, libRead, load, suggestName } from "./builds.js";
 import { Collab } from "./collab.js";
 import { CURKEY, setKind } from "./core.js";
 import { enterBench, homeShow, newSheet, onCrewChange } from "./home.js";
+import { watchInvites } from "./invites.js";
 import { draw } from "./render.js";
 import { evaluate } from "./sim.js";
 import { startClock } from "./timing.js";
@@ -66,6 +67,7 @@ export function start(){
   startClock();
   installApi();
   Collab.onChange(onCrewChange);
+  watchInvites();
   /* builds merged in from another device, and the state of saving, show up straight away */
   Auth.onMerged(notify);
   Auth.onSync(notify);

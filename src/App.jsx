@@ -11,6 +11,8 @@ import Home from "./components/Home.jsx";
 import Arena from "./components/Arena.jsx";
 import Login from "./components/Login.jsx";
 import Dialog from "./components/Dialog.jsx";
+import InviteDialog from "./components/InviteDialog.jsx";
+import InvitePopup from "./components/InvitePopup.jsx";
 import KindChooser from "./components/KindChooser.jsx";
 import Toast from "./components/Toast.jsx";
 import Tutorials from "./components/Tutorials.jsx";
@@ -68,6 +70,8 @@ export default function App() {
       {S.tutorialOpen && <Tutorials />}
       {S.login && <Login />}
       {S.dialog && <Dialog key={S.dialog.n} ask={S.dialog} />}
+      {S.invitePicker && <InviteDialog key={S.invitePicker.project.id} project={S.invitePicker.project} />}
+      {!S.login && S.invites.length > 0 && <InvitePopup />}
       {S.chooser && <KindChooser />}
       {/* over the home page or the Arena the toast floats on the whole screen */}
       {over && <Toast float />}
