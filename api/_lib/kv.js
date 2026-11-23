@@ -1,120 +1,211 @@
 /* A small key-value layer for the things that change many times a minute:
    shared projects, and (when connected) accounts and personal builds too.
 
-   On Vercel this is Upstash Redis from the Vercel Marketplace, which sets
-   KV_REST_API_URL / KV_REST_API_TOKEN (or UPSTASH_REDIS_REST_URL / _TOKEN).
-   Locally, with neither set, it is an in-memory stand-in with the same two
-   scripts, so `npm run dev` works with no setup (projects last until it stops).
+   On Vercel this is a Postgres database — Neon's free plan from the Vercel
+   Marketplace, which sets DATABASE_URL (any other Postgres works too: Supabase,
+   or your own, via DATABASE_URL or POSTGRES_URL). The tables are made on first use.
+   Locally, with neither set, it is an in-memory stand-in with the same calls,
+   so `npm run dev` works with no setup (projects last until it stops).
 
-   The two scripts are where order matters. SYNC applies one person's changes and
-   gives that change set the next number in one step, so every change a project
-   has ever had sits in a single numbered line that every device replays the same. */
+   The one step where order matters is SYNC (the lb_sync function in the database):
+   it applies one person's changes and gives that change set the next number while
+   holding the project's lock, so every change a project has ever had sits in a
+   single numbered line that every device replays the same. */
 "use strict";
 
 const { StoreError } = require("./errors");
 
-const URL_ = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+const DB_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
 const LOG_KEEP = 300;          /* change sets kept for catching up; behind that, a full copy is sent */
 const HERE_TTL = 60000;        /* a presence row older than this is dropped */
 
-function configured() { return !!(URL_ && TOKEN); }
+function configured() { return !!DB_URL; }
 
-/* KEYS: mem n w rev log here
-   ARGV: uid since now hereField hereValue nN [id val]*  nW [id val]*  entryTail
-   An empty val deletes. Returns {-1} for a non-member, else
-   {rev, mine, 0, here}            nothing new since `since`
-   {rev, mine, 1, here, entries}   the change sets after `since`
-   {rev, mine, 2, here, n, w}      too far behind: everything */
-const SYNC_LUA = `
-if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return {-1} end
-local since = tonumber(ARGV[2])
-local now = tonumber(ARGV[3])
-if ARGV[5] ~= '' then redis.call('HSET', KEYS[6], ARGV[4], ARGV[5]) end
-local i = 6
-local changed = false
-local nn = tonumber(ARGV[i]); i = i + 1
-for k = 1, nn do
-  if ARGV[i + 1] == '' then redis.call('HDEL', KEYS[2], ARGV[i]) else redis.call('HSET', KEYS[2], ARGV[i], ARGV[i + 1]) end
-  i = i + 2; changed = true
+/* Strings (with an optional expiry, ms since 1970), hashes, sets, mailboxes and
+   each project's change log, as five tables. Run as one statement list, so it is
+   one transaction, behind a lock, so two cold starts don't make them at once. */
+const SCHEMA = String.raw`
+select pg_advisory_xact_lock(4120917);
+create table if not exists lb_str (k text primary key, v text not null, exp bigint);
+create index if not exists lb_str_exp on lb_str (exp) where exp is not null;
+create table if not exists lb_hash (k text not null, f text not null, v text not null, primary key (k, f));
+create table if not exists lb_set (k text not null, m text not null, primary key (k, m));
+create table if not exists lb_mail (i bigserial primary key, k text not null, v text not null, exp bigint not null);
+create index if not exists lb_mail_k on lb_mail (k, i);
+create index if not exists lb_mail_exp on lb_mail (exp);
+create table if not exists lb_log (k text not null, r bigint not null, v text not null, primary key (k, r));
+
+/* ks: mem n w rev log here
+   a:  uid since now hereField hereValue nN [id val]*  nW [id val]*  entryTail
+   An empty val deletes. Returns [-1] for a non-member, else
+   [rev, mine, 0, here]            nothing new since 'since'
+   [rev, mine, 1, here, entries]   the change sets after 'since'
+   [rev, mine, 2, here, n, w]      too far behind: everything
+   (here, n and w as {field: value}) */
+create or replace function lb_sync(ks text[], a text[]) returns jsonb language plpgsql as $f$
+declare
+  _since bigint := a[2]::bigint;
+  _now bigint := a[3]::bigint;
+  _i int := 6;
+  _cnt int;
+  _key text;
+  _changed boolean := false;
+  _rev bigint;
+  _mine bigint := 0;
+  _first bigint;
+  _here jsonb;
+begin
+  if not exists (select 1 from lb_hash where k = ks[1] and f = a[1]) then return '[-1]'::jsonb; end if;
+  perform pg_advisory_xact_lock(hashtext(ks[4]));
+  if a[5] <> '' then
+    insert into lb_hash (k, f, v) values (ks[6], a[4], a[5]) on conflict (k, f) do update set v = excluded.v;
+  end if;
+  foreach _key in array array[ks[2], ks[3]] loop
+    _cnt := a[_i]::int; _i := _i + 1;
+    for _j in 1.._cnt loop
+      if a[_i + 1] = '' then
+        delete from lb_hash where k = _key and f = a[_i];
+      else
+        insert into lb_hash (k, f, v) values (_key, a[_i], a[_i + 1]) on conflict (k, f) do update set v = excluded.v;
+      end if;
+      _i := _i + 2; _changed := true;
+    end loop;
+  end loop;
+  select coalesce((select v::bigint from lb_str where k = ks[4]), 0) into _rev;
+  if _changed then
+    _rev := _rev + 1; _mine := _rev;
+    insert into lb_str (k, v, exp) values (ks[4], _rev::text, null) on conflict (k) do update set v = excluded.v, exp = null;
+    insert into lb_log (k, r, v) values (ks[5], _rev, '{"r":' || _rev || ',' || a[_i]);
+    delete from lb_log where k = ks[5] and r <= _rev - ${LOG_KEEP};
+  end if;
+  delete from lb_hash where k = ks[6]
+    and (substring(v from '^(\d+)\|') is null or _now - substring(v from '^(\d+)\|')::bigint >= ${HERE_TTL});
+  select coalesce(jsonb_object_agg(f, v), '{}'::jsonb) into _here from lb_hash where k = ks[6];
+  if _since = _rev then return jsonb_build_array(_rev, _mine, 0, _here); end if;
+  select min(r) into _first from lb_log where k = ks[5];
+  if _since >= 0 and _since < _rev and _first is not null and _since + 1 >= _first then
+    return jsonb_build_array(_rev, _mine, 1, _here,
+      (select coalesce(jsonb_agg(v order by r), '[]'::jsonb) from lb_log where k = ks[5] and r > _since));
+  end if;
+  return jsonb_build_array(_rev, _mine, 2, _here,
+    (select coalesce(jsonb_object_agg(f, v), '{}'::jsonb) from lb_hash where k = ks[2]),
+    (select coalesce(jsonb_object_agg(f, v), '{}'::jsonb) from lb_hash where k = ks[3]));
 end
-local nw = tonumber(ARGV[i]); i = i + 1
-for k = 1, nw do
-  if ARGV[i + 1] == '' then redis.call('HDEL', KEYS[3], ARGV[i]) else redis.call('HSET', KEYS[3], ARGV[i], ARGV[i + 1]) end
-  i = i + 2; changed = true
-end
-local rev = tonumber(redis.call('GET', KEYS[4]) or '0')
-local mine = 0
-if changed then
-  rev = redis.call('INCR', KEYS[4]); mine = rev
-  redis.call('RPUSH', KEYS[5], '{"r":' .. rev .. ',' .. ARGV[i])
-  local over = redis.call('LLEN', KEYS[5]) - ${LOG_KEEP}
-  if over > 0 then redis.call('LTRIM', KEYS[5], over, -1) end
-end
-local all = redis.call('HGETALL', KEYS[6])
-local here = {}
-for j = 1, #all, 2 do
-  local t = tonumber(string.match(all[j + 1], '^(%d+)|'))
-  if t and now - t < ${HERE_TTL} then here[#here + 1] = all[j]; here[#here + 1] = all[j + 1]
-  else redis.call('HDEL', KEYS[6], all[j]) end
-end
-if since == rev then return {rev, mine, 0, here} end
-local len = redis.call('LLEN', KEYS[5])
-local first = rev - len + 1
-if since >= 0 and since < rev and since + 1 >= first then
-  return {rev, mine, 1, here, redis.call('LRANGE', KEYS[5], since + 1 - first, -1)}
-end
-return {rev, mine, 2, here, redis.call('HGETALL', KEYS[2]), redis.call('HGETALL', KEYS[3])}
+$f$;
 `;
 
-/* KEYS: mem n w rev   ARGV: uid   → {-1} or {rev, n, w} taken at one instant */
-const FULL_LUA = `
-if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return {-1} end
-return {tonumber(redis.call('GET', KEYS[4]) or '0'), redis.call('HGETALL', KEYS[2]), redis.call('HGETALL', KEYS[3])}
-`;
+/* KEYS: mem n w rev   ARGV: uid   → [-1] or [rev, n, w] taken at one instant (one statement) */
+const FULL_SQL = `
+select case when exists (select 1 from lb_hash where k = $1 and f = $5) then jsonb_build_array(
+  coalesce((select v::bigint from lb_str where k = $4), 0),
+  (select coalesce(jsonb_object_agg(f, v), '{}'::jsonb) from lb_hash where k = $2),
+  (select coalesce(jsonb_object_agg(f, v), '{}'::jsonb) from lb_hash where k = $3)
+) else '[-1]'::jsonb end as out`;
 
-/* KEYS: mailbox   → everything in it, emptied in one step (voice signalling) */
-const DRAIN_LUA = `
-local a = redis.call('LRANGE', KEYS[1], 0, -1)
-redis.call('DEL', KEYS[1])
-return a
-`;
+function objToFlat(o) {
+  const a = [];
+  Object.keys(o || {}).forEach(function (f) { a.push(f, o[f]); });
+  return a;
+}
 
-/* ---------- Upstash ---------- */
-function upstash() {
-  const { Redis } = require("@upstash/redis");
-  const r = new Redis({ url: URL_, token: TOKEN, automaticDeserialization: false });
-  const sync = r.createScript(SYNC_LUA), full = r.createScript(FULL_LUA), drain = r.createScript(DRAIN_LUA);
-  const obj = function (h) { return h && typeof h === "object" && !Array.isArray(h) ? h : flatToObj(h || []); };
+/* ---------- Postgres ----------
+   `query(text, params)` → rows. On Vercel it is a pg Pool; the tests pass their own. */
+function postgres(query) {
+  let ready = null;
+  const q = async function (text, params) {
+    if (!ready) ready = query(SCHEMA).catch(function (err) { ready = null; throw err; });
+    await ready;
+    return query(text, params);
+  };
+  const now = () => Date.now();
+  const sometimes = () => Math.random() < 0.02;
+  const strs = (a) => a.map(String);
   return {
-    kind: "redis",
-    get: (k) => r.get(k),
-    set: (k, v, opt) => {
-      opt = opt || {};
-      const o = {};
-      if (opt.nx) o.nx = true;
-      if (opt.ex) o.ex = opt.ex;
-      return r.set(k, v, o).then((res) => res === "OK" || res === true);
+    kind: "postgres",
+    get: async (k) => {
+      const rows = await q("select v from lb_str where k = $1 and (exp is null or exp > $2)", [k, now()]);
+      return rows.length ? rows[0].v : null;
     },
-    del: (...k) => r.del(...k),
-    hset: (k, o) => Object.keys(o).length ? r.hset(k, o) : 0,
-    hdel: (k, f) => r.hdel(k, f),
-    hexists: (k, f) => r.hexists(k, f).then((n) => !!n),
-    hgetall: (k) => r.hgetall(k).then(obj),
-    hlen: (k) => r.hlen(k),
-    sadd: (k, m) => r.sadd(k, m),
-    srem: (k, m) => r.srem(k, m),
-    smembers: (k) => r.smembers(k),
-    /* a mailbox: add to the end (keeping the newest `cap`, gone after `ttl` s), take everything */
+    set: async (k, v, opt) => {
+      opt = opt || {};
+      const t = now();
+      if (opt.ex && sometimes()) await q("delete from lb_str where exp <= $1", [t]);
+      /* with nx, a live row stays as it is and nothing comes back */
+      const rows = await q(
+        "insert into lb_str (k, v, exp) values ($1, $2, $3) on conflict (k) do update set v = excluded.v, exp = excluded.exp" +
+        " where not $4::boolean or (lb_str.exp is not null and lb_str.exp <= $5) returning 1 as ok",
+        [k, String(v), opt.ex ? t + opt.ex * 1000 : null, !!opt.nx, t]);
+      return rows.length > 0;
+    },
+    del: async (...ks) => {
+      await q("delete from lb_str where k = any($1)", [ks]);
+      await q("delete from lb_hash where k = any($1)", [ks]);
+      await q("delete from lb_set where k = any($1)", [ks]);
+      await q("delete from lb_mail where k = any($1)", [ks]);
+      await q("delete from lb_log where k = any($1)", [ks]);
+      return ks.length;
+    },
+    hset: async (k, o) => {
+      const f = Object.keys(o);
+      if (!f.length) return 0;
+      await q("insert into lb_hash (k, f, v) select $1::text, * from unnest($2::text[], $3::text[])" +
+        " on conflict (k, f) do update set v = excluded.v", [k, f, f.map((x) => String(o[x]))]);
+      return f.length;
+    },
+    hdel: async (k, f) => (await q("delete from lb_hash where k = $1 and f = $2 returning 1 as ok", [k, f])).length,
+    hexists: async (k, f) => (await q("select 1 as ok from lb_hash where k = $1 and f = $2", [k, f])).length > 0,
+    hgetall: async (k) => {
+      const o = {};
+      (await q("select f, v from lb_hash where k = $1", [k])).forEach((r) => { o[r.f] = r.v; });
+      return o;
+    },
+    hlen: async (k) => Number((await q("select count(*) as n from lb_hash where k = $1", [k]))[0].n),
+    sadd: async (k, m) => (await q("insert into lb_set (k, m) values ($1, $2) on conflict do nothing returning 1 as ok", [k, String(m)])).length,
+    srem: async (k, m) => (await q("delete from lb_set where k = $1 and m = $2 returning 1 as ok", [k, String(m)])).length,
+    smembers: async (k) => (await q("select m from lb_set where k = $1", [k])).map((r) => r.m),
+    /* a mailbox: add to the end (keeping the newest `cap`, all gone `ttl` s after the last post), take everything */
     post: async (k, vals, cap, ttl) => {
       if (!vals.length) return 0;
-      await r.pipeline().rpush(k, ...vals).ltrim(k, -cap, -1).expire(k, ttl).exec();
+      const exp = now() + ttl * 1000;
+      await q("insert into lb_mail (k, v, exp) select $1::text, x, $3::bigint from unnest($2::text[]) with ordinality as t(x, o) order by o", [k, strs(vals), exp]);
+      await q("update lb_mail set exp = $2 where k = $1", [k, exp]);
+      await q("delete from lb_mail where k = $1 and i not in (select i from lb_mail where k = $1 order by i desc limit $2)", [k, cap]);
       return vals.length;
     },
-    drain: (k) => drain.exec([k], []).then((a) => a || []),
-    sync: (keys, args) => sync.exec(keys, args.map(String)),
-    full: (keys, args) => full.exec(keys, args.map(String))
+    drain: async (k) => {
+      const t = now();
+      if (sometimes()) await q("delete from lb_mail where exp <= $1", [t]);
+      const rows = await q("delete from lb_mail where k = $1 returning i, v, exp", [k]);
+      return rows.filter((r) => Number(r.exp) > t).sort((a, b) => Number(a.i) - Number(b.i)).map((r) => r.v);
+    },
+    sync: async (keys, args) => {
+      const out = (await q("select lb_sync($1::text[], $2::text[]) as out", [keys, strs(args)]))[0].out;
+      if (out[0] === -1) return [-1];
+      const res = [out[0], out[1], out[2], objToFlat(out[3])];
+      if (out[2] === 1) res.push(out[4]);
+      if (out[2] === 2) res.push(objToFlat(out[4]), objToFlat(out[5]));
+      return res;
+    },
+    full: async (keys, args) => {
+      const out = (await q(FULL_SQL, [keys[0], keys[1], keys[2], keys[3], String(args[0])]))[0].out;
+      if (out[0] === -1) return [-1];
+      return [out[0], objToFlat(out[1]), objToFlat(out[2])];
+    }
   };
+}
+
+/* The connection: TLS for anything that isn't this machine (sslmode=disable turns
+   it off); PGSSL_NO_VERIFY=1 accepts a certificate Node can't check (some hosts). */
+function pgPool() {
+  const { Pool } = require("pg");
+  const u = new URL(DB_URL);
+  const mode = u.searchParams.get("sslmode");
+  ["sslmode", "sslrootcert", "sslcert", "sslkey", "uselibpqcompat"].forEach((p) => u.searchParams.delete(p));
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname);
+  const ssl = mode === "disable" || (local && !mode) ? false : { rejectUnauthorized: process.env.PGSSL_NO_VERIFY !== "1" };
+  const pool = new Pool({ connectionString: u.toString(), ssl: ssl, max: 4, idleTimeoutMillis: 10000, connectionTimeoutMillis: 10000 });
+  pool.on("error", function () {});   /* an idle connection the server closed; the next query opens another */
+  return postgres((text, params) => pool.query(text, params).then((r) => r.rows));
 }
 
 function flatToObj(a) {
@@ -165,7 +256,7 @@ function memory() {
       const l = db.get(k); db.delete(k); expiry.delete(k);
       return l;
     },
-    /* the same steps as SYNC_LUA, run in one go (Node does not interleave them) */
+    /* the same steps as lb_sync, run in one go (Node does not interleave them) */
     sync: async (K, A) => {
       A = A.map(String);
       if (!(db.get(K[0]) instanceof Map) || !db.get(K[0]).has(A[0])) return [-1];
@@ -207,12 +298,12 @@ function memory() {
 let client = null;
 function kv() {
   if (client) return client;
-  if (configured()) return (client = upstash());
+  if (configured()) return (client = pgPool());
   if (process.env.VERCEL) {
     throw new StoreError("UNAVAILABLE",
-      "Shared projects need Redis. In the Vercel project open Storage, add Upstash for Redis (free), connect it to this project, and redeploy.");
+      "Shared projects need a database. In the Vercel project open Storage, add Neon (Postgres, free), connect it to this project, and redeploy.");
   }
   return (client = memory());
 }
 
-module.exports = { kv, configured, SYNC_LUA, FULL_LUA, DRAIN_LUA, flatToObj, _memory: memory };
+module.exports = { kv, configured, flatToObj, SCHEMA, _memory: memory, _postgres: postgres };

@@ -1,6 +1,6 @@
 /* Where accounts and benches are kept.
-   On Vercel this is Upstash Redis when it is connected (see kv.js) — it takes
-   frequent small writes cheaply — or else a private Blob store
+   On Vercel this is the Postgres database when it is connected (see kv.js) — it
+   takes frequent small writes cheaply — or else a private Blob store
    (BLOB_READ_WRITE_TOKEN, or OIDC + BLOB_STORE_ID). Locally, with neither of those set, it is the .data folder
    so the login can be tried without a store. A Vercel deploy with no store
    connected refuses to write, rather than pretending a temporary disk is durable. */
@@ -58,8 +58,8 @@ async function readJson(key) {
   if (kvMod.configured()) {
     const text = await kvMod.kv().get(key);
     if (text) return JSON.parse(text);
-    /* Redis connected after accounts were made in Blob: an account or its builds
-       that Redis does not have yet are read from Blob once and copied across.
+    /* the database connected after accounts were made in Blob: an account or its
+       builds that the database does not have yet are read from Blob once and copied across.
        Sessions are not carried over; signing in again makes a new one. */
     if (blobConfigured() && key.indexOf("logic-bench/sessions/") !== 0) {
       const old = await readBlob(key);
@@ -71,7 +71,7 @@ async function readJson(key) {
   if (blobConfigured()) return readBlob(key);
   if (process.env.VERCEL) {
     throw new StoreError("UNAVAILABLE",
-      "Account storage is not connected. In the Vercel project open Storage, add Upstash for Redis (or a private Blob store), connect it to this project, and redeploy.");
+      "Account storage is not connected. In the Vercel project open Storage, add Neon (Postgres, free), connect it to this project, and redeploy.");
   }
   try {
     return JSON.parse(fs.readFileSync(fileOf(key), "utf8"));
@@ -118,7 +118,7 @@ async function writeJson(key, value, exclusive) {
   }
   if (process.env.VERCEL) {
     throw new StoreError("UNAVAILABLE",
-      "Account storage is not connected. In the Vercel project open Storage, create a private Blob store, connect it to this project, and redeploy.");
+      "Account storage is not connected. In the Vercel project open Storage, add Neon (Postgres, free), connect it to this project, and redeploy.");
   }
   const file = fileOf(key);
   fs.mkdirSync(path.dirname(file), { recursive: true });

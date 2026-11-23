@@ -6,7 +6,7 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lb-inv-"));
 process.env.LOGIC_BENCH_DATA = dir;
-delete process.env.VERCEL; delete process.env.KV_REST_API_URL; delete process.env.UPSTASH_REDIS_REST_URL;
+delete process.env.VERCEL; delete process.env.DATABASE_URL; delete process.env.POSTGRES_URL;
 delete process.env.BLOB_READ_WRITE_TOKEN;
 const accounts = require("../api/_lib/accounts.js");
 const projects = require("../api/_lib/projects.js");

@@ -114,7 +114,7 @@ sign in after that, and the session is remembered, so you can carry on building 
 
 - **On the website** accounts live on the server (`api/`, Vercel Functions). Passwords are kept as
   salted scrypt hashes; the session is an HttpOnly cookie that lasts 30 days. Each account's builds are
-  stored on the server (Upstash Redis, or a private Vercel Blob store), so signing in on any device
+  stored on the server (a Postgres database, or a private Vercel Blob store), so signing in on any device
   brings them back.
 - The browser keeps a working copy and sends it up about a second after each change. The avatar in the
   header shows a grey dot while saving and an orange one when it can't reach the server (it retries,
@@ -145,7 +145,7 @@ subtractor, all on the same CPU (`src/bench/collab.js`, `api/projects.js`, `api/
 - **How it stays in step.** Every part and wire has an id, and each device tags the ids it makes with its
   own mark so two people never make the same one. About once a second a device sends the parts and wires
   it changed and gets back every change since the last one it saw. The server numbers each change set in
-  one atomic step (a Redis script), so every device replays the same changes in the same order, and the
+  one atomic step (a database function that holds the project's lock), so every device replays the same changes in the same order, and the
   latest change to a given part wins. A change that is still on its way from this device is never
   overwritten by an older one from someone else, so a drag isn't yanked away mid-move. It checks about
   once a second while others are on the sheet, every few seconds alone, and every few seconds in a
@@ -234,8 +234,8 @@ src/
 public/               icon and web manifest, served as they are
 api/                  Vercel Functions: auth/{register,login,logout,me}, state (an account's builds),
                       projects (every shared-project call, by action)
-  _lib/               accounts, projects, cookies and request helpers; kv.js (Redis, with the two
-                      scripts), store.js (Redis, Blob, or local .data/ files)
+  _lib/               accounts, projects, cookies and request helpers; kv.js (Postgres, with the
+                      sync function), store.js (Postgres, Blob, or local .data/ files)
 tools/dev-server.mjs  serves the built site (dist/) and the api/ routes together, without Vite
 tools/bench-harness.mjs  a stub browser and the bench's modules, for the headless tests
 tools/test-cleaner.mjs   headless checks for the Cleaner and saved chips
@@ -262,7 +262,7 @@ npm run preview       # serves dist/ with the /api routes
 npm test              # the Cleaner and quantum checks
 ```
 
-Locally, with no Redis or Blob set, accounts and builds are kept as files in `.data/` (git-ignored)
+Locally, with no database or Blob set, accounts and builds are kept as files in `.data/` (git-ignored)
 and shared projects are kept in memory until the server stops — open two browser profiles (or one
 normal and one private window) to try building together. The one-file copy (below) opens straight from
 disk, with browser-only accounts.
@@ -273,16 +273,18 @@ Import this repo in Vercel. `vercel.json` sets the framework to **Vite**, the bu
 `npm run build` and the output folder to `dist`, so nothing needs setting by hand; the `api/` folder is
 deployed as Node functions beside it. Every push to `main` redeploys.
 
-It needs storage, once: in the Vercel project open **Storage**, add **Upstash for Redis** from the
-Marketplace (the free plan is enough to start), connect it to the project — this sets `KV_REST_API_URL`
-and `KV_REST_API_TOKEN` — and redeploy. Redis then holds accounts, builds and shared projects.
+It needs storage, once: in the Vercel project open **Storage**, add **Neon** (Serverless Postgres)
+from the Marketplace — the free plan is enough — connect it to the project, which sets `DATABASE_URL`,
+and redeploy. The database then holds accounts, builds and shared projects; its tables are made on
+first use. Any other Postgres works the same way: put its connection string in `DATABASE_URL` (or
+`POSTGRES_URL`), e.g. Supabase's free plan. If the host's certificate can't be checked by Node
+("self-signed certificate in certificate chain"), also set `PGSSL_NO_VERIFY=1`.
 
-Why Redis and not only Blob: a shared project syncs about once a second per person. Blob's free Hobby
-allowance is 2,000 uploads and 10,000 reads a month, and going over locks Blob for 30 days, which a
-couple of afternoons of building together would do. Upstash's free tier is 500,000 commands a month,
-and one sync is a handful of commands. If only a Blob store is connected, accounts and builds still work from it,
-and shared projects say Redis is needed. Until either is connected, creating an account shows a message
-saying so — nothing is silently lost.
+Why a database and not only Blob: a shared project syncs about once a second per person. Blob's free
+Hobby allowance is 2,000 uploads and 10,000 reads a month, and going over locks Blob for 30 days, which a
+couple of afternoons of building together would do. A sync is one call to the database. If only a Blob
+store is connected, accounts and builds still work from it, and shared projects say a database is
+needed. Until either is connected, creating an account shows a message saying so — nothing is silently lost.
 
 ## One-file offline copy
 

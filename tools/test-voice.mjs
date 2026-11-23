@@ -2,7 +2,7 @@
    presence, mailboxes, who may talk to whom, the size limit. */
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
-delete process.env.VERCEL; delete process.env.KV_REST_API_URL; delete process.env.UPSTASH_REDIS_REST_URL;
+delete process.env.VERCEL; delete process.env.DATABASE_URL; delete process.env.POSTGRES_URL;
 const projects = require("../api/_lib/projects.js");
 
 let bad = 0, n = 0;
