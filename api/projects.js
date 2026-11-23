@@ -3,7 +3,8 @@
 /* One function for every shared-project call, picked by `action`:
    GET  → the projects you are in
    POST {action:"create", name, start, kind} · {action:"join", code} · {action:"open", id}
-        {action:"sync", id, since, client, patch, here} · {action:"rename", id, name}
+        {action:"sync", id, since, client, patch, here} · {action:"voice", id, client, on, m, signals}
+        {action:"rename", id, name}
         {action:"leave", id} · {action:"delete", id} */
 const accounts = require("./_lib/accounts");
 const projects = require("./_lib/projects");
@@ -22,6 +23,7 @@ module.exports = handle(async function (req) {
     case "join": return { body: { project: await projects.join(user, b.code) } };
     case "open": return { body: await projects.open(user, b.id) };
     case "sync": return { body: await projects.sync(user, b.id, b) };
+    case "voice": return { body: await projects.voice(user, b.id, b) };
     case "rename": return { body: { project: await projects.rename(user, b.id, b.name) } };
     case "leave": return { body: await projects.leave(user, b.id) };
     case "delete": return { body: await projects.remove(user, b.id) };

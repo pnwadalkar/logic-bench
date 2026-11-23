@@ -73,11 +73,18 @@ if redis.call('HEXISTS', KEYS[1], ARGV[1]) == 0 then return {-1} end
 return {tonumber(redis.call('GET', KEYS[4]) or '0'), redis.call('HGETALL', KEYS[2]), redis.call('HGETALL', KEYS[3])}
 `;
 
+/* KEYS: mailbox   → everything in it, emptied in one step (voice signalling) */
+const DRAIN_LUA = `
+local a = redis.call('LRANGE', KEYS[1], 0, -1)
+redis.call('DEL', KEYS[1])
+return a
+`;
+
 /* ---------- Upstash ---------- */
 function upstash() {
   const { Redis } = require("@upstash/redis");
   const r = new Redis({ url: URL_, token: TOKEN, automaticDeserialization: false });
-  const sync = r.createScript(SYNC_LUA), full = r.createScript(FULL_LUA);
+  const sync = r.createScript(SYNC_LUA), full = r.createScript(FULL_LUA), drain = r.createScript(DRAIN_LUA);
   const obj = function (h) { return h && typeof h === "object" && !Array.isArray(h) ? h : flatToObj(h || []); };
   return {
     kind: "redis",
@@ -98,6 +105,13 @@ function upstash() {
     sadd: (k, m) => r.sadd(k, m),
     srem: (k, m) => r.srem(k, m),
     smembers: (k) => r.smembers(k),
+    /* a mailbox: add to the end (keeping the newest `cap`, gone after `ttl` s), take everything */
+    post: async (k, vals, cap, ttl) => {
+      if (!vals.length) return 0;
+      await r.pipeline().rpush(k, ...vals).ltrim(k, -cap, -1).expire(k, ttl).exec();
+      return vals.length;
+    },
+    drain: (k) => drain.exec([k], []).then((a) => a || []),
     sync: (keys, args) => sync.exec(keys, args.map(String)),
     full: (keys, args) => full.exec(keys, args.map(String))
   };
@@ -137,6 +151,20 @@ function memory() {
     sadd: async (k, m) => { set_(k).add(m); return 1; },
     srem: async (k, m) => (db.get(k) instanceof Set ? +db.get(k).delete(m) : 0),
     smembers: async (k) => (db.get(k) instanceof Set ? Array.from(db.get(k)) : []),
+    post: async (k, vals, cap, ttl) => {
+      if (!vals.length) return 0;
+      alive(k);
+      const l = list(k);
+      l.push(...vals);
+      if (l.length > cap) l.splice(0, l.length - cap);
+      expiry.set(k, Date.now() + ttl * 1000);
+      return vals.length;
+    },
+    drain: async (k) => {
+      if (!alive(k) || !Array.isArray(db.get(k))) return [];
+      const l = db.get(k); db.delete(k); expiry.delete(k);
+      return l;
+    },
     /* the same steps as SYNC_LUA, run in one go (Node does not interleave them) */
     sync: async (K, A) => {
       A = A.map(String);
@@ -187,4 +215,4 @@ function kv() {
   return (client = memory());
 }
 
-module.exports = { kv, configured, SYNC_LUA, FULL_LUA, flatToObj, _memory: memory };
+module.exports = { kv, configured, SYNC_LUA, FULL_LUA, DRAIN_LUA, flatToObj, _memory: memory };

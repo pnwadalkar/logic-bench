@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { S, flash, notify } from "../bench/state.js";
 import { Auth } from "../bench/auth.js";
 import { Collab } from "../bench/collab.js";
+import { Voice } from "../bench/voice.js";
 import { tipText } from "../bench/core.js";
 import { countText, picked } from "../bench/sim.js";
 import { askNew, exampleHere, renameBuild, saveBuild } from "../bench/builds.js";
@@ -52,6 +53,32 @@ function FullButton() {
   );
 }
 
+/* Voice chat with the people on the sheet: Voice joins or leaves, Mute silences your microphone. */
+function VoiceButtons() {
+  if (!Voice.supported()) return null;
+  const on = Voice.active(), starting = Voice.starting();
+  const join = () => Voice.join().catch((e) => flash(e.message));
+  return (
+    <>
+      <button id="btnVoice" type="button" className={on ? "key" : ""} disabled={starting}
+        title={on ? "Leave the voice chat" : "Talk with the people on this sheet — your microphone is only used while you are in"}
+        onClick={() => { if (on) Voice.leave(); else join(); }}>
+        {starting ? "Starting…" : on ? "Leave voice" : "Voice"}
+      </button>
+      {on && !starting && (
+        <button id="btnMute" type="button" className={Voice.muted() ? "danger" : ""}
+          title={Voice.muted() ? "Your microphone is off — press to talk" : "Turn your microphone off (they can still be heard)"}
+          onClick={() => Voice.toggleMute()}>
+          {Voice.muted() ? "Unmute" : "Mute"}
+        </button>
+      )}
+      {on && !starting && Voice.trouble() && (
+        <span id="voiceTrouble" title="A direct link to someone could not be made. Some networks (offices, some phone data plans) block voice between devices.">⚠</span>
+      )}
+    </>
+  );
+}
+
 /* Who is on a shared sheet with you, and whether it is live. */
 function Crew() {
   if (!Collab.active()) return null;
@@ -63,6 +90,7 @@ function Crew() {
       <span id="crewPpl" aria-label="Who is here"><Avatars people={crewList()} max={5} /></span>
       <button id="btnInvite" type="button" title="Invite people to build on this sheet with you"
         onClick={() => inviteAsk(Collab.project())}>Invite</button>
+      <VoiceButtons />
     </span>
   );
 }

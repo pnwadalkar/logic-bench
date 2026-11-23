@@ -5,6 +5,7 @@ import { Auth } from "./auth.js";
 import { keepBuild, leaveShared, libRead, libWrite, load, saveCur, suggestName } from "./builds.js";
 import { setTest } from "./cleaner.js";
 import { Collab } from "./collab.js";
+import { Voice } from "./voice.js";
 import { CURKEY, STUB, TYPES, box, inPort, outPort, setKind } from "./core.js";
 import { pushUndo } from "./edit.js";
 import { closeRename } from "./input.js";
@@ -234,11 +235,24 @@ export function askQuitShared(p){
 }
 /* Who is on this sheet with you, yourself first: the strip in the top bar. */
 export function crewList(){
-  var me = Auth.current(), list = me ? [{name:me.name + " (you)", color:me.color}] : [], seen = {};
+  var me = Auth.current(), list = me ? [{name:me.name + " (you)", color:me.color, u:me.id}] : [], seen = {}, talk = {};
   Collab.peers().forEach(function(h){
     if (seen[h.u] || (me && h.u === me.id)) return;
-    seen[h.u] = 1; list.push({name:h.name, color:h.color});
+    seen[h.u] = 1; list.push({name:h.name, color:h.color, u:h.u});
   });
+  /* who is in the voice chat, and who is talking, shown on their initial */
+  if (Voice.active()){
+    if (list[0]) Object.assign(list[0], {voice:true, muted:Voice.muted(), speaking:Voice.speaking()});
+    Voice.people().forEach(function(v){ talk[v.u] = v; });
+    list.forEach(function(p, i){
+      var v = i === 0 && me ? null : talk[p.u];
+      if (v) Object.assign(p, {voice:true, muted:v.muted, speaking:v.speaking});
+    });
+    /* someone in the call who has not sent a cursor yet still gets an initial */
+    Voice.people().forEach(function(v){
+      if (!seen[v.u] && !(me && v.u === me.id)){ seen[v.u] = 1; list.push({name:v.name, color:v.color, u:v.u, voice:true, muted:v.muted, speaking:v.speaking}); }
+    });
+  }
   return list;
 }
 /* Something about the shared project changed. If it is gone — deleted, or you

@@ -213,6 +213,77 @@ async function sync(user, pid, body) {
   });
 }
 
+/* ---------- voice ----------
+   Voice goes straight between the browsers (WebRTC); the server only carries the
+   hellos. Each person in the call keeps a presence row, refreshed on every call
+   here, and has a mailbox where the others leave offers, answers and network
+   candidates. One call takes what you have to say, gives back what was left for
+   you, and lists who else is in the call. */
+const VOICE_MAX = 8;              /* everyone hears everyone, so each person holds a link to each other one */
+const VOICE_TTL = 15000;          /* a presence row older than this is dropped */
+const VOICE_MAIL_TTL = 60;        /* seconds a hello waits in a mailbox */
+const VOICE_MAIL_CAP = 200;
+const VOICE_SIGNALS = 40;         /* in one call */
+const VOICE_SIGNAL_SIZE = 8000;   /* one offer, answer or candidate, as text */
+const CLIENT_ID = /^[a-z0-9]{4,16}$/;
+const mailbox = (pid, client) => K(pid, "vm") + ":" + client;
+
+/* The servers a browser may use to find a way through to the others. STUN is
+   enough for most networks; a TURN relay (VOICE_TURN_URLS, VOICE_TURN_USER,
+   VOICE_TURN_PASS in the Vercel settings) is for the ones that block direct links. */
+function voiceServers() {
+  const out = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478"] }];
+  const urls = String(process.env.VOICE_TURN_URLS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (urls.length) out.push({ urls: urls, username: process.env.VOICE_TURN_USER || "", credential: process.env.VOICE_TURN_PASS || "" });
+  return out;
+}
+
+async function voice(user, pid, body) {
+  return guard(async function () {
+    pid = cleanPid(pid);
+    await needMember(user, pid);
+    const client = String(body.client || "");
+    if (!CLIENT_ID.test(client)) throw new HttpError(400, "That was not valid.");
+    const now = Date.now();
+    const vc = K(pid, "vc");
+    if (!body.on) {
+      await kv().hdel(vc, client);
+      await kv().drain(mailbox(pid, client));
+      return { peers: [], signals: [], now: now };
+    }
+    const rows = await kv().hgetall(vc);
+    const live = [];
+    for (const k of Object.keys(rows)) {
+      const cut = String(rows[k]).indexOf("|");
+      const t = Number(String(rows[k]).slice(0, cut));
+      let o = null;
+      try { o = JSON.parse(String(rows[k]).slice(cut + 1)); } catch (err) {}
+      if (!o || !(now - t < VOICE_TTL)) { await kv().hdel(vc, k); continue; }
+      live.push({ k: k, t: t, u: o.u, name: o.name, color: o.color, m: !!o.m });
+    }
+    if (!live.some((p) => p.k === client) && live.length >= VOICE_MAX) throw new HttpError(400, "The voice chat is full (" + VOICE_MAX + " people).");
+    await kv().hset(vc, { [client]: now + "|" + JSON.stringify({ u: user.id, name: user.name, color: user.color, m: !!body.m }) });
+    /* leave hellos for the others */
+    const sent = Array.isArray(body.signals) ? body.signals.slice(0, VOICE_SIGNALS) : [];
+    const byTo = new Map();
+    for (const s of sent) {
+      if (!s || !CLIENT_ID.test(String(s.to || "")) || s.to === client) continue;
+      if (typeof s.d !== "string" || s.d.length > VOICE_SIGNAL_SIZE) continue;
+      if (!live.some((p) => p.k === s.to)) continue;
+      if (!byTo.has(s.to)) byTo.set(s.to, []);
+      byTo.get(s.to).push(JSON.stringify({ f: client, d: s.d }));
+    }
+    for (const [to, vals] of byTo) await kv().post(mailbox(pid, to), vals, VOICE_MAIL_CAP, VOICE_MAIL_TTL);
+    /* and take what the others left for this one */
+    const mail = [];
+    for (const raw of await kv().drain(mailbox(pid, client))) {
+      try { const o = JSON.parse(raw); if (o && typeof o.f === "string" && typeof o.d === "string") mail.push({ f: o.f, d: o.d }); } catch (err) {}
+    }
+    const peers = live.filter((p) => p.k !== client).map((p) => ({ k: p.k, u: p.u, name: p.name, color: p.color, m: p.m }));
+    return { peers: peers, signals: mail, ice: voiceServers(), now: now };
+  });
+}
+
 async function rename(user, pid, name) {
   return guard(async function () {
     pid = cleanPid(pid);
@@ -229,7 +300,7 @@ async function wipe(pid, m) {
   const mem = await kv().hgetall(K(pid, "mem"));
   await Promise.all(Object.keys(mem).map(function (uid) { return kv().srem(mine(uid), pid); }));
   if (m && m.code) await kv().del(codeKey(m.code));
-  await kv().del(K(pid, "meta"), ...keysOf(pid));
+  await kv().del(K(pid, "meta"), K(pid, "vc"), ...keysOf(pid));
 }
 
 /* Leaving takes the project off your list. The last one out takes it with them;
@@ -259,4 +330,4 @@ async function remove(user, pid) {
   });
 }
 
-module.exports = { list, create, join, open, sync, rename, leave, remove };
+module.exports = { list, create, join, open, sync, voice, rename, leave, remove };

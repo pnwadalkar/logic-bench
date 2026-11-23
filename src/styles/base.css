@@ -158,12 +158,15 @@ form.join button{border-radius:0 6px 6px 0}
   font-style:normal;color:#fff;box-shadow:0 0 0 2px var(--panel)}
 .ppl i+i{margin-left:-5px}
 .ppl i.more{background:var(--grid);color:var(--fg)}
+.ppl i.talk{box-shadow:0 0 0 2px var(--panel),0 0 0 4px #2fa36b}
+.ppl i.mute{opacity:.55}
 
 /* the top bar while a shared project is open */
 #crew{flex:none;display:inline-flex;align-items:center;gap:8px;margin-left:6px}
 #crew .live{width:8px;height:8px;border-radius:50%;background:#2fa36b;box-shadow:0 0 0 3px color-mix(in srgb,#2fa36b 25%,transparent)}
 #crew .live.offline{background:var(--hot);box-shadow:0 0 0 3px color-mix(in srgb,var(--hot) 25%,transparent)}
 #crew .ppl i{width:20px;height:20px;font-size:9px}
+#voiceTrouble{color:var(--hot);cursor:help;font-size:14px}
 @media (max-width:700px){#crew .ppl{display:none}}
 
 /* the picker: a bar that rides over the boxed-in area, so copy and paste are

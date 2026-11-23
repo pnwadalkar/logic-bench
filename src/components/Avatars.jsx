@@ -5,7 +5,9 @@ export default function Avatars({ people, max = 6 }) {
   return (
     <span className="ppl">
       {people.slice(0, max).map((p, i) => (
-        <i key={i} style={{ background: Collab.hue(p.color) }} title={p.name + (p.note || "")}>
+        <i key={i} style={{ background: Collab.hue(p.color) }}
+          className={(p.speaking ? "talk " : "") + (p.voice && p.muted ? "mute" : "")}
+          title={p.name + (p.note || "") + (p.voice ? (p.muted ? " · in the voice chat, muted" : " · in the voice chat") : "")}>
           {String(p.name || "?").charAt(0).toUpperCase()}
         </i>
       ))}
