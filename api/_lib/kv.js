@@ -195,14 +195,17 @@ function postgres(query) {
 }
 
 /* The connection: TLS for anything that isn't this machine (sslmode=disable turns
-   it off); PGSSL_NO_VERIFY=1 accepts a certificate Node can't check (some hosts). */
+   it off); PGSSL_NO_VERIFY=1 accepts a certificate Node can't check (other hosts). */
 function pgPool() {
   const { Pool } = require("pg");
   const u = new URL(DB_URL);
   const mode = u.searchParams.get("sslmode");
   ["sslmode", "sslrootcert", "sslcert", "sslkey", "uselibpqcompat"].forEach((p) => u.searchParams.delete(p));
   const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname);
-  const ssl = mode === "disable" || (local && !mode) ? false : { rejectUnauthorized: process.env.PGSSL_NO_VERIFY !== "1" };
+  /* Supabase signs with its own root certificate, which Node doesn't carry: still encrypted, just not checked */
+  const supabase = /(^|\.)supabase\.(com|co)$/.test(u.hostname);
+  const ssl = mode === "disable" || (local && !mode) ? false
+    : { rejectUnauthorized: !supabase && process.env.PGSSL_NO_VERIFY !== "1" };
   const pool = new Pool({ connectionString: u.toString(), ssl: ssl, max: 4, idleTimeoutMillis: 10000, connectionTimeoutMillis: 10000 });
   pool.on("error", function () {});   /* an idle connection the server closed; the next query opens another */
   return postgres((text, params) => pool.query(text, params).then((r) => r.rows));

@@ -277,7 +277,8 @@ It needs storage, once: in the Vercel project open **Storage**, add **Neon** (Se
 from the Marketplace — the free plan is enough — connect it to the project, which sets `DATABASE_URL`,
 and redeploy. The database then holds accounts, builds and shared projects; its tables are made on
 first use. Any other Postgres works the same way: put its connection string in `DATABASE_URL` (or
-`POSTGRES_URL`), e.g. Supabase's free plan. If the host's certificate can't be checked by Node
+`POSTGRES_URL`), e.g. Supabase's free plan (its own root certificate is accepted without a check;
+the link is still encrypted). If another host's certificate can't be checked by Node
 ("self-signed certificate in certificate chain"), also set `PGSSL_NO_VERIFY=1`.
 
 Why a database and not only Blob: a shared project syncs about once a second per person. Blob's free
